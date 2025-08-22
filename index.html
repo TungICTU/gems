@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Match-3 — Power-Ups (Fixed)</title>
+  <style>
+    :root { --size: 64px; --gap: 6px; --n: 8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; display: grid; place-items: center; height: 100%; background: #eef2ff; font-family: sans-serif; }
+    .wrap { width: calc(var(--size) * var(--n)); user-select: none; }
+    .hud { display: flex; justify-content: space-between; margin-bottom: 10px; }
+    .pill { padding: 6px 10px; border-radius: 12px; background: #fff; border: 1px solid #ccc; font-weight: 700; }
+    .board { position: relative; width: calc(var(--size) * var(--n)); height: calc(var(--size) * var(--n)); background: #f9fafb; border: 1px solid #ddd; border-radius: 12px; overflow: hidden; }
+    .cell-bg { position: absolute; width: var(--size); height: var(--size); border: 1px solid rgba(0,0,0,0.05); pointer-events: none; z-index: 0; }
+    .tile { position: absolute; width: var(--size); height: var(--size); display: grid; place-items: center; transition: transform 180ms ease, opacity 160ms ease; z-index: 1; font-size: 28px; }
+    .tile.falling { z-index: 3; }
+    .tile.moving { z-index: 2; }
+    .tile.dragging { z-index: 10; transform: scale(1.06); }
+    .gem { width: calc(var(--size) - var(--gap)); height: calc(var(--size) - var(--gap)); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; font-weight: bold; }
+    .c-0 { background: #ef4444; }
+    .c-1 { background: #f59e0b; }
+    .c-2 { background: #10b981; }
+    .c-3 { background: #3b82f6; }
+    .c-4 { background: #8b5cf6; }
+    .c-5 { background: #ec4899; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hud">
+      <div class="pill" id="score">Score: 0</div>
+      <div class="pill" id="moves">Moves: 0</div>
+      <button id="reset">New Game</button>
+    </div>
+    <div class="board" id="board"></div>
+  </div>
+
+  <script>
+    const N = 8, COLORS = 6, SIZE = 64;
+    const T_NORMAL = 'normal', T_BOMB = 'bomb', T_STAR = 'star', T_RAINBOW = 'rainbow';
+
+    let board = [];
+    let lastSwap = null;
+    let score = 0, moves = 0;
+    let resolving = false, resolveQueued = false;
+
+    const boardEl = document.getElementById('board');
+    const scoreEl = document.getElementById('score');
+    const movesEl = document.getElementById('moves');
+
+    const randInt = n => Math.floor(Math.random() * n);
+    const inBounds = (r, c) => r >= 0 && r < N && c >= 0 && c < N;
+
+    function makeTile(r, c, color = randInt(COLORS)){
+      const el = document.createElement('div'); el.className = 'tile';
+      const gem = document.createElement('div'); gem.className = `gem c-${color}`; el.appendChild(gem);
+      boardEl.appendChild(el);
+      const t = { row: r, col: c, color, type: T_NORMAL, el, isClearing: false };
+      styleTile(t);
+      attachDragHandlers(t);
+      return t;
+    }
+
+    function styleTile(t){ t.el.style.transform = `translate(${t.col * SIZE}px,${t.row * SIZE}px)`; }
+
+    function attachDragHandlers(t){
+      let start = null, moved = false;
+      const onDown = (e) => {
+        if (t.isClearing) return;
+        e.preventDefault();
+        start = { x: e.clientX || e.touches?.[0]?.clientX, y: e.clientY || e.touches?.[0]?.clientY };
+        t.el.classList.add('dragging');
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onUp);
+      };
+      const onMove = (e) => {
+        if (!start) return;
+        const x = e.clientX || e.touches?.[0]?.clientX;
+        const y = e.clientY || e.touches?.[0]?.clientY;
+        const dx = x - start.x, dy = y - start.y;
+        if (!moved && Math.max(Math.abs(dx), Math.abs(dy)) > 18) {
+          moved = true;
+          let dr = 0, dc = 0;
+          if (Math.abs(dx) > Math.abs(dy)) dc = dx > 0 ? 1 : -1; else dr = dy > 0 ? 1 : -1;
+          const nr = t.row + dr, nc = t.col + dc;
+          if (inBounds(nr, nc)) {
+            start = null;
+            doPlayerSwap(t.row, t.col, nr, nc);
+          }
+        }
+      };
+      const onUp = () => {
+        start = null; moved = false;
+        t.el.classList.remove('dragging');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onUp);
+      };
+      t.el.addEventListener('mousedown', onDown);
+      t.el.addEventListener('touchstart', onDown, { passive: false });
+    }
+
+    function swapTiles(a, b){
+      const ar = a.row, ac = a.col;
+      a.row = b.row; a.col = b.col;
+      b.row = ar; b.col = ac;
+      board[a.row][a.col] = a;
+      board[b.row][b.col] = b;
+      a.el.classList.add('moving'); b.el.classList.add('moving');
+      styleTile(a); styleTile(b);
+      setTimeout(()=>{ if (a.el) a.el.classList.remove('moving'); if (b.el) b.el.classList.remove('moving'); }, 220);
+    }
+
+    function queueResolve(){
+      resolveQueued = true;
+      if (resolving) return;
+      resolving = true;
+      (async () => {
+        while (resolveQueued) {
+          resolveQueued = false;
+          await resolveBoard();
+        }
+        resolving = false;
+      })();
+    }
+
+    async function doPlayerSwap(r1, c1, r2, c2){
+      const a = board[r1][c1], b = board[r2][c2];
+      if (!a || !b || a.isClearing || b.isClearing) return;
+
+      lastSwap = { r1, c1, r2, c2 }; // record coords involved in swap
+      swapTiles(a, b);
+      await wait(180);
+      const matches = findMatches();
+
+      if (matches.length === 0) {
+        // If one of the swapped tiles is a rainbow, activate it (clear all of the partner color)
+        const t1 = board[r1][c1], t2 = board[r2][c2];
+        if (t1 && t1.type === T_RAINBOW && t2) {
+          clearTile(t1);
+          moves++; setHUD(); queueResolve();
+          return;
+        }
+        if (t2 && t2.type === T_RAINBOW && t1) {
+          clearTile(t2);
+          moves++; setHUD(); queueResolve();
+          return;
+        }
+
+        // No match and no rainbow activation -> swap back
+        swapTiles(a, b);
+        await wait(180);
+        return;
+      }
+
+      moves++; setHUD();
+      queueResolve();
+    }
+
+    function setHUD(){ scoreEl.textContent = `Score: ${score}`; movesEl.textContent = `Moves: ${moves}`; }
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+
+    function findMatches() {
+      const raw = [];
+
+      // horizontal runs
+      for (let r = 0; r < N; r++) {
+        let run = 1;
+        for (let c = 1; c <= N; c++) {
+          const cur = c < N ? board[r][c] : null;
+          const prev = c-1 >= 0 ? board[r][c-1] : null;
+          if (cur && prev && cur.color === prev.color) run++; else {
+            if (run >= 3) {
+              const tiles = [];
+              for (let k = c - run; k < c; k++) tiles.push({ r, c: k });
+              raw.push(tiles);
+            }
+            run = 1;
+          }
+        }
+      }
+
+      // vertical runs
+      for (let c = 0; c < N; c++) {
+        let run = 1;
+        for (let r = 1; r <= N; r++) {
+          const cur = r < N ? board[r][c] : null;
+          const prev = r-1 >= 0 ? board[r-1][c] : null;
+          if (cur && prev && cur.color === prev.color) run++; else {
+            if (run >= 3) {
+              const tiles = [];
+              for (let k = r - run; k < r; k++) tiles.push({ r: k, c });
+              raw.push(tiles);
+            }
+            run = 1;
+          }
+        }
+      }
+
+      // merge overlapping runs into L/T shapes
+      const merged = [];
+      while (raw.length) {
+        let group = raw.pop();
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (let i = raw.length - 1; i >= 0; i--) {
+            if (raw[i].some(a => group.some(b => a.r === b.r && a.c === b.c))) {
+              group = group.concat(raw[i]);
+              raw.splice(i, 1);
+              changed = true;
+            }
+          }
+        }
+        // remove duplicates
+        const uniq = [];
+        const seen = new Set();
+        for (const t of group) {
+          const key = t.r + "," + t.c;
+          if (!seen.has(key)) { seen.add(key); uniq.push(t); }
+        }
+        merged.push({ tiles: uniq });
+      }
+
+      return merged;
+    }
+
+    function classifyMatch(match){
+  const tiles = match.tiles;
+  const rowsMap = new Map();
+  const colsMap = new Map();
+
+  // group by row / col
+  for (const {r,c} of tiles){
+    if (!rowsMap.has(r)) rowsMap.set(r, []);
+    rowsMap.get(r).push(c);
+    if (!colsMap.has(c)) colsMap.set(c, []);
+    colsMap.get(c).push(r);
+  }
+
+  // longest contiguous run in any row
+  const longestInSorted = (arr) => {
+    arr.sort((a,b)=>a-b);
+    let best = 1, cur = 1;
+    for (let i=1;i<arr.length;i++){
+      if (arr[i] === arr[i-1] + 1) cur++;
+      else if (arr[i] !== arr[i-1]) cur = 1; // ignore duplicates if any
+      best = Math.max(best, cur);
+    }
+    return best;
+  };
+
+  let maxH = 1, maxV = 1;
+  for (const cols of rowsMap.values()) maxH = Math.max(maxH, longestInSorted(cols.slice()));
+  for (const rows of colsMap.values()) maxV = Math.max(maxV, longestInSorted(rows.slice()));
+  const maxLine = Math.max(maxH, maxV);
+
+  // L/T detection: group spans multiple rows AND cols and has at least 5 tiles
+  const isLT = tiles.length >= 5 && rowsMap.size > 1 && colsMap.size > 1;
+
+  const specials = [];
+  if (maxLine >= 5) specials.push(T_RAINBOW);
+  else if (maxLine === 4) specials.push(T_BOMB);
+  if (isLT) specials.push(T_STAR);
+
+  // Always return at least normal
+  return specials.length ? specials : [T_NORMAL];
+}
+
+    async function resolveBoard(){
+  while (true){
+    const matches = findMatches();
+
+    // check if there's any tile already marked for clearing (e.g., rainbow activation called earlier)
+    let anyMarked = false;
+    for (let r = 0; r < N; r++){
+      for (let c = 0; c < N; c++){
+        if (board[r][c] && board[r][c].isClearing) { anyMarked = true; break; }
+      }
+      if (anyMarked) break;
+    }
+
+    // if no matches and nothing already marked, we're done
+    if (matches.length === 0 && !anyMarked) break;
+
+    const toClear = new Set();
+
+    // If matches exist, decide power-ups and which tiles to clear
+    for (const m of matches){
+      const specials = classifyMatch(m);
+
+// if we have any special(s)
+if (!(specials.length === 1 && specials[0] === T_NORMAL)) {
+  // All tiles in the match
+  let candidates = m.tiles.map(({r,c}) => board[r][c]).filter(Boolean);
+
+  // Pick "chosen" (prefer last-swap tile, else middle)
+  let chosen = null;
+  if (lastSwap){
+    for (const coord of m.tiles){
+      if ((coord.r===lastSwap.r1 && coord.c===lastSwap.c1) ||
+          (coord.r===lastSwap.r2 && coord.c===lastSwap.c2)){
+        chosen = board[coord.r][coord.c];
+        break;
+      }
+    }
+  }
+  if (!chosen){
+    const mid = m.tiles[Math.floor(m.tiles.length/2)];
+    chosen = board[mid.r][mid.c];
+  }
+
+  // Remove chosen from candidates
+  candidates = candidates.filter(t => t !== chosen);
+
+  // Reorder specials so ⭐ goes on the chosen gem if present
+  const ordered = specials.slice();
+  const starIdx = ordered.indexOf(T_STAR);
+  if (starIdx > -1) {
+    ordered.splice(starIdx, 1);
+    ordered.unshift(T_STAR);
+  }
+
+  // Manhattan-nearest to chosen for extras
+  const specialTargets = [];
+  function takeNearestToChosen(){
+    if (!chosen || candidates.length === 0) return null;
+    candidates.sort((a,b)=>{
+      const da = Math.abs(a.row - chosen.row) + Math.abs(a.col - chosen.col);
+      const db = Math.abs(b.row - chosen.row) + Math.abs(b.col - chosen.col);
+      return da - db;
+    });
+    return candidates.shift() || null;
+  }
+
+  // Assign specials: ⭐ on chosen (if present first), others to nearest tiles
+  ordered.forEach((sp, i) => {
+    const target = (i === 0) ? chosen : takeNearestToChosen();
+    if (!target) return;
+    target.type = sp;
+    target.el.firstChild.textContent = sp===T_BOMB ? "💣" : sp===T_STAR ? "⭐" : sp===T_RAINBOW ? "🌈" : "";
+    specialTargets.push(target);
+  });
+
+  // Clear all remaining tiles in this match that are not one of the special targets
+  const keepSet = new Set(specialTargets);
+  for (const {r,c} of m.tiles){
+    const t = board[r][c];
+    if (t && !keepSet.has(t)) {
+      toClear.add(r*N + c);
+    }
+  }
+  continue;
+}
+
+
+      // normal: clear all tiles in the match
+      for (const coord of m.tiles) toClear.add(coord.r*N+coord.c);
+    }
+
+    // Also include any tiles that were already marked
+    for (let r = 0; r < N; r++){
+      for (let c = 0; c < N; c++){
+        const t = board[r][c];
+        if (t && t.isClearing) toClear.add(r*N + c);
+      }
+    }
+
+    // Call clearTile on each coordinate we've decided to clear
+    for (const key of toClear){
+      const r = Math.floor(key/N), c = key%N;
+      const cur = board[r][c];
+      if (cur) clearTile(cur);
+    }
+
+    await wait(250);
+
+    // Remove cleared tiles
+    for (let r = 0; r < N; r++){
+      for (let c = 0; c < N; c++){
+        const cur = board[r][c];
+        if (cur && cur.isClearing){
+          cur.el.remove();
+          board[r][c] = null;
+          score += 10;
+        }
+      }
+    }
+
+    setHUD();
+    await collapseAndRefill();
+    await wait(120);
+  }
+}
+
+
+    function clearTile(t){
+  if (!t) return;
+  if (t.isClearing) return; // already processed this tile
+
+  t.isClearing = true;
+  t.el.style.opacity = 0;
+
+  // Trigger power-up effects
+  if (t.type === T_BOMB){
+    for (let dr=-1; dr<=1; dr++) {
+      for (let dc=-1; dc<=1; dc++) {
+        const nr = t.row + dr, nc = t.col + dc;
+        if (inBounds(nr,nc) && board[nr][nc]) clearTile(board[nr][nc]);
+      }
+    }
+  }
+  else if (t.type === T_STAR){
+    for (let i=0;i<N;i++){
+      if (board[t.row][i]) clearTile(board[t.row][i]);
+      if (board[i][t.col]) clearTile(board[i][t.col]);
+    }
+  }
+  else if (t.type === T_RAINBOW){
+    if (lastSwap){
+      const p1 = board[lastSwap.r1]?.[lastSwap.c1] || null;
+      const p2 = board[lastSwap.r2]?.[lastSwap.c2] || null;
+      let partner = null;
+      if (p1 && p1 !== t && p1.type !== T_RAINBOW) partner = p1;
+      else if (p2 && p2 !== t && p2.type !== T_RAINBOW) partner = p2;
+      else partner = p1 || p2;
+
+      if (partner){
+        const targetColor = partner.color;
+        for (let r=0;r<N;r++){
+          for (let c=0;c<N;c++){
+            if (board[r][c] && board[r][c].color === targetColor) clearTile(board[r][c]);
+          }
+        }
+      }
+    }
+  }
+}
+
+
+    function markForClear(t){ if (!t || t.isClearing) return; t.isClearing = true; t.el.style.opacity = 0; }
+
+    async function collapseAndRefill(){
+    for (let c = 0; c < N; c++){
+      let write = N-1;
+
+      // Move existing tiles down
+      for (let r = N-1; r>=0; r--){
+        const t = board[r][c];
+        if (t){
+          if (t.row !== write){
+            const oldRow = t.row;
+            t.row = write;
+            board[write][c] = t;
+            board[r][c] = null;
+
+            const distance = (write - oldRow) * SIZE;
+            const duration = 120 + distance * 0.5; // scale with distance
+
+            t.el.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
+            styleTile(t);
+
+            setTimeout(()=>{ if(t.el) t.el.style.transition = ""; }, duration+20);
+          }
+          write--;
+        }
+      }
+
+      // Spawn new tiles at the top
+      for (let r=write; r>=0; r--){
+        const t = makeTile(r,c,randInt(COLORS));
+        t.row=r; t.col=c;
+        board[r][c]=t;
+
+        // drop from above
+        const spawnRow = -1 - (write-r); 
+        t.el.style.transform=`translate(${c*SIZE}px,${spawnRow*SIZE}px)`;
+
+        const distance = (r - spawnRow) * SIZE;
+        const duration = 120 + distance * 0.5;
+
+        requestAnimationFrame(()=>{
+          t.el.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
+          styleTile(t);
+        });
+
+        setTimeout(()=>{ if(t.el) t.el.style.transition = ""; }, duration+20);
+      }
+    }
+    await wait(250);
+  }
+
+
+    function buildBoard(){
+      boardEl.innerHTML = '';
+      for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+        const bg=document.createElement('div'); bg.className='cell-bg'; bg.style.transform=`translate(${c*SIZE}px,${r*SIZE}px)`; boardEl.appendChild(bg);
+      }
+      board = Array.from({length:N},(_,r)=>Array.from({length:N},(_,c)=>makeTile(r,c)));
+      for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+        while (causesImmediateMatch(r,c)){
+          const cur=board[r][c]; cur.color=randInt(COLORS); cur.el.firstChild.className=`gem c-${cur.color}`;
+        }
+      }
+      score=0;moves=0;setHUD();
+    }
+
+    function causesImmediateMatch(r,c){
+      const cur=board[r][c]; if(!cur) return false; const color=cur.color;
+      if (c>=2 && board[r][c-1]&&board[r][c-2]&&board[r][c-1].color===color&&board[r][c-2].color===color) return true;
+      if (r>=2 && board[r-1][c]&&board[r-2][c]&&board[r-1][c].color===color&&board[r-2][c].color===color) return true;
+      return false;
+    }
+
+    document.getElementById('reset').addEventListener('click',()=>buildBoard());
+    buildBoard();
+  </script>
+</body>
+</html>
