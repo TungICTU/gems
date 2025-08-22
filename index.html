@@ -5,12 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Match-3 — Power-Ups (Fixed)</title>
   <style>
-:root {
-  --n: 8;
-  --gap: 4px;
-  /* Tile size adapts: min 36px on tiny screens, max 64px on desktop */
-  --size: clamp(36px, calc(90vw / var(--n)), 64px);
-}
+:root { --size: 64px; --gap: 6px; --n: 8; }
+
 
 * { box-sizing: border-box; }
 
@@ -27,8 +23,8 @@ body {
 
 .wrap {
   width: calc(var(--size) * var(--n));
-  max-width: 100%;
   user-select: none;
+  transform-origin: top center;
 }
 
 .hud {
@@ -101,6 +97,18 @@ body {
 .c-4 { background: #8b5cf6; }
 .c-5 { background: #ec4899; }
 .gem.rainbow { background: #9ca3af; }
+
+/* scale board down only on smaller screens */
+@media (max-width: 600px) {
+  .wrap {
+    transform: scale(0.7);
+  }
+}
+@media (max-width: 400px) {
+  .wrap {
+    transform: scale(0.55);
+  }
+}
 
 </style>
 </head>
