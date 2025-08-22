@@ -5,26 +5,104 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Match-3 — Power-Ups (Fixed)</title>
   <style>
-    :root { --size: 64px; --gap: 6px; --n: 8; }
-    * { box-sizing: border-box; }
-    body { margin: 0; display: grid; place-items: center; height: 100%; background: #eef2ff; font-family: sans-serif; }
-    .wrap { width: calc(var(--size) * var(--n)); user-select: none; }
-    .hud { display: flex; justify-content: space-between; margin-bottom: 10px; }
-    .pill { padding: 6px 10px; border-radius: 12px; background: #fff; border: 1px solid #ccc; font-weight: 700; }
-    .board { position: relative; width: calc(var(--size) * var(--n)); height: calc(var(--size) * var(--n)); background: #f9fafb; border: 1px solid #ddd; border-radius: 12px; overflow: hidden; }
-    .cell-bg { position: absolute; width: var(--size); height: var(--size); border: 1px solid rgba(0,0,0,0.05); pointer-events: none; z-index: 0; }
-    .tile { position: absolute; width: var(--size); height: var(--size); display: grid; place-items: center; transition: transform 180ms ease, opacity 160ms ease; z-index: 1; font-size: 28px; }
-    .tile.falling { z-index: 3; }
-    .tile.moving { z-index: 2; }
-    .tile.dragging { z-index: 10; transform: scale(1.06); }
-    .gem { width: calc(var(--size) - var(--gap)); height: calc(var(--size) - var(--gap)); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; font-weight: bold; }
-    .c-0 { background: #ef4444; }
-    .c-1 { background: #f59e0b; }
-    .c-2 { background: #10b981; }
-    .c-3 { background: #3b82f6; }
-    .c-4 { background: #8b5cf6; }
-    .c-5 { background: #ec4899; }
-  </style>
+:root {
+  --n: 8;
+  --gap: 4px;
+  /* Tile size adapts: min 36px on tiny screens, max 64px on desktop */
+  --size: clamp(36px, calc(90vw / var(--n)), 64px);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  background: #eef2ff;
+  font-family: sans-serif;
+  padding: 10px;
+}
+
+.wrap {
+  width: calc(var(--size) * var(--n));
+  max-width: 100%;
+  user-select: none;
+}
+
+.hud {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #ccc;
+  font-weight: 700;
+  font-size: clamp(12px, 2.5vw, 16px);
+}
+
+.board {
+  position: relative;
+  width: calc(var(--size) * var(--n));
+  height: calc(var(--size) * var(--n));
+  background: #f9fafb;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.cell-bg {
+  position: absolute;
+  width: var(--size);
+  height: var(--size);
+  border: 1px solid rgba(0,0,0,0.05);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.tile {
+  position: absolute;
+  width: var(--size);
+  height: var(--size);
+  display: grid;
+  place-items: center;
+  transition: transform 180ms ease, opacity 160ms ease;
+  z-index: 1;
+  font-size: clamp(16px, 4vw, 28px);
+}
+
+.tile.falling { z-index: 3; }
+.tile.moving { z-index: 2; }
+.tile.dragging { z-index: 10; transform: scale(1.06); }
+
+.gem {
+  width: calc(var(--size) - var(--gap));
+  height: calc(var(--size) - var(--gap));
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(14px, 3.5vw, 24px);
+  color: #fff;
+  font-weight: bold;
+}
+
+.c-0 { background: #ef4444; }
+.c-1 { background: #f59e0b; }
+.c-2 { background: #10b981; }
+.c-3 { background: #3b82f6; }
+.c-4 { background: #8b5cf6; }
+.c-5 { background: #ec4899; }
+.gem.rainbow { background: #9ca3af; }
+
+</style>
 </head>
 <body>
   <div class="wrap">
@@ -38,7 +116,7 @@
 
   <script>
     const N = 8, COLORS = 6, SIZE = 64;
-    const T_NORMAL = 'normal', T_BOMB = 'bomb', T_STAR = 'star', T_RAINBOW = 'rainbow';
+    const T_NORMAL = 'normal', T_BOMB = 'bomb', T_STAR = 'star', T_RAINBOW = 'rainbow', T_SUPERNOVA = 'supernova';
 
     let board = [];
     let lastSwap = null;
@@ -128,30 +206,282 @@
       })();
     }
 
-    async function doPlayerSwap(r1, c1, r2, c2){
+    async function resolveBoard(){
+  while (true){
+    const matches = findMatches();
+
+    // check if there's any tile already marked for clearing (e.g., rainbow activation called earlier)
+    let anyMarked = false;
+    for (let r = 0; r < N; r++){
+      for (let c = 0; c < N; c++){
+        if (board[r][c] && board[r][c].isClearing) { anyMarked = true; break; }
+      }
+      if (anyMarked) break;
+    }
+
+    // if no matches and nothing already marked, we're done
+    if (matches.length === 0 && !anyMarked) break;
+
+    const toClear = new Set();
+
+    // If matches exist, decide power-ups and which tiles to clear
+    for (const m of matches){
+      const specials = classifyMatch(m);
+
+// if we have any special(s)
+if (!(specials.length === 1 && specials[0] === T_NORMAL)) {
+  // All tiles in the match
+  let candidates = m.tiles.map(({r,c}) => board[r][c]).filter(Boolean);
+
+  // Pick "chosen" (prefer last-swap tile, else middle)
+  let chosen = null;
+  if (lastSwap){
+    for (const coord of m.tiles){
+      if ((coord.r===lastSwap.r1 && coord.c===lastSwap.c1) ||
+          (coord.r===lastSwap.r2 && coord.c===lastSwap.c2)){
+        chosen = board[coord.r][coord.c];
+        break;
+      }
+    }
+  }
+  if (!chosen){
+    const mid = m.tiles[Math.floor(m.tiles.length/2)];
+    chosen = board[mid.r][mid.c];
+  }
+
+  // Remove chosen from candidates
+  candidates = candidates.filter(t => t !== chosen);
+
+  // Reorder specials so ⭐ goes on the chosen gem if present
+  const ordered = specials.slice();
+  const starIdx = ordered.indexOf(T_STAR);
+  if (starIdx > -1) {
+    ordered.splice(starIdx, 1);
+    ordered.unshift(T_STAR);
+  }
+
+  // Manhattan-nearest to chosen for extras
+  const specialTargets = [];
+  function takeNearestToChosen(){
+    if (!chosen || candidates.length === 0) return null;
+    candidates.sort((a,b)=>{
+      const da = Math.abs(a.row - chosen.row) + Math.abs(a.col - chosen.col);
+      const db = Math.abs(b.row - chosen.row) + Math.abs(b.col - chosen.col);
+      return da - db;
+    });
+    return candidates.shift() || null;
+  }
+
+    // Assign specials: ⭐ on chosen (if present first), others to nearest tiles
+  ordered.forEach((sp, i) => {
+    const target = (i === 0) ? chosen : takeNearestToChosen();
+    if (!target) return;
+
+    if (target.type !== T_NORMAL) {
+      // Already a special: trigger it first, then replace after
+      target.pendingType = sp;
+      target.pendingSymbol = (sp===T_BOMB ? "💣" : sp===T_STAR ? "⭐" : sp===T_RAINBOW ? "🌈" : sp===T_SUPERNOVA ? "💥" : "");
+      clearTile(target);
+    } else {
+      if (sp === T_RAINBOW) {
+        target.type = T_RAINBOW;
+        target.color = null;
+        target.el.firstChild.className = "gem rainbow";
+        target.el.firstChild.textContent = "🌈";
+      } else if (sp === T_SUPERNOVA) {
+        target.type = T_SUPERNOVA;
+        // orientation is attached to the array returned by classifyMatch
+        if (ordered.orientation) target.orientation = ordered.orientation;
+        else if (specials && specials.orientation) target.orientation = specials.orientation;
+        else target.orientation = 'hor';
+        target.el.firstChild.textContent = "💥";
+      } else {
+        target.type = sp;
+        target.el.firstChild.textContent = sp===T_BOMB ? "💣" : sp===T_STAR ? "⭐" : "";
+      }
+    }
+    specialTargets.push(target);
+  });
+
+  // Clear all remaining tiles in this match that are not one of the special targets
+  const keepSet = new Set(specialTargets);
+  for (const {r,c} of m.tiles){
+    const t = board[r][c];
+    if (t && !keepSet.has(t)) {
+      toClear.add(r*N + c);
+    }
+  }
+  continue;
+}
+
+
+      // normal: clear all tiles in the match
+      for (const coord of m.tiles) toClear.add(coord.r*N+coord.c);
+    }
+
+    // Also include any tiles that were already marked
+    for (let r = 0; r < N; r++){
+      for (let c = 0; c < N; c++){
+        const t = board[r][c];
+        if (t && t.isClearing) toClear.add(r*N + c);
+      }
+    }
+
+    // Call clearTile on each coordinate we've decided to clear
+    for (const key of toClear){
+      const r = Math.floor(key/N), c = key%N;
+      const cur = board[r][c];
+      if (cur) clearTile(cur);
+    }
+
+    await wait(250);
+
+    // Remove cleared tiles
+    // Remove cleared tiles OR transform into pending specials
+    for (let r = 0; r < N; r++){
+      for (let c = 0; c < N; c++){
+        const cur = board[r][c];
+        if (cur && cur.isClearing){
+          if (cur.pendingType) {
+            // Respawn as pending special instead of removing
+            cur.isClearing = false;
+            cur.type = cur.pendingType;
+            cur.pendingType = null;
+            cur.el.style.opacity = 1;
+            cur.el.firstChild.textContent = cur.pendingSymbol || "";
+            delete cur.pendingSymbol;
+          } else {
+            // Normal removal
+            cur.el.remove();
+            board[r][c] = null;
+            score += 10;
+          }
+        }
+      }
+    }
+
+
+    setHUD();
+    await collapseAndRefill();
+    await wait(120);
+  }
+}
+
+
+    function clearTile(t, forceColor=null){
+  if (!t) return;
+  if (t.isClearing) return; // already processed this tile
+
+  t.isClearing = true;
+  t.el.style.opacity = 0;
+
+  // --- Bomb ---
+  if (t.type === T_BOMB){
+    for (let dr=-1; dr<=1; dr++) {
+      for (let dc=-1; dc<=1; dc++) {
+        const nr = t.row + dr, nc = t.col + dc;
+        if (inBounds(nr,nc) && board[nr][nc]) clearTile(board[nr][nc]);
+      }
+    }
+  }
+
+  // --- Star ---
+  else if (t.type === T_STAR){
+    for (let i=0;i<N;i++){
+      if (board[t.row][i]) clearTile(board[t.row][i]);
+      if (board[i][t.col]) clearTile(board[i][t.col]);
+    }
+  }
+
+  // --- Rainbow ---
+  else if (t.type === T_RAINBOW){
+    let targetColor = forceColor;
+
+    if (targetColor == null) {
+      const colorsOnBoard = [];
+      for (let r=0;r<N;r++){
+        for (let c=0;c<N;c++){
+          if (board[r][c] && board[r][c].color != null) {
+            colorsOnBoard.push(board[r][c].color);
+          }
+        }
+      }
+      if (colorsOnBoard.length > 0) {
+        targetColor = colorsOnBoard[Math.floor(Math.random()*colorsOnBoard.length)];
+      }
+    }
+
+    if (targetColor != null){
+      for (let r=0;r<N;r++){
+        for (let c=0;c<N;c++){
+          if (board[r][c] && board[r][c].color === targetColor){
+            clearTile(board[r][c]);
+          }
+        }
+      }
+    }
+  }
+
+  // --- Supernova ---
+  else if (t.type === T_SUPERNOVA){
+    const r0 = t.row, c0 = t.col;
+
+    // Clear a "thick cross": 3 rows + 3 cols centered at (r0,c0)
+    for (let r=0; r<N; r++){
+      for (let dc=-1; dc<=1; dc++){
+        const cc = c0+dc;
+        if (inBounds(r,cc) && board[r][cc]) clearTile(board[r][cc]);
+      }
+    }
+
+    for (let c=0; c<N; c++){
+      for (let dr=-1; dr<=1; dr++){
+        const rr = r0+dr;
+        if (inBounds(rr,c) && board[rr][c]) clearTile(board[rr][c]);
+      }
+    }
+  }
+}
+
+
+
+    function markForClear(t){ if (!t || t.isClearing) return; t.isClearing = true; t.el.style.opacity = 0; }
+
+async function doPlayerSwap(r1, c1, r2, c2){
       const a = board[r1][c1], b = board[r2][c2];
       if (!a || !b || a.isClearing || b.isClearing) return;
 
-      lastSwap = { r1, c1, r2, c2 }; // record coords involved in swap
+      lastSwap = { r1, c1, r2, c2 };
       swapTiles(a, b);
       await wait(180);
+
+      // --- Rainbow + Rainbow: clear whole board ---
+      if (a.type === T_RAINBOW && b.type === T_RAINBOW) {
+        for (let r = 0; r < N; r++) {
+          for (let c = 0; c < N; c++) {
+            if (board[r][c]) clearTile(board[r][c]);
+          }
+        }
+        moves++; setHUD(); queueResolve();
+        return;
+      }
+
+      // --- Rainbow + normal gem: clear that color ---
+      if (a.type === T_RAINBOW && b) {
+        clearTile(a, b.color);
+        moves++; setHUD(); queueResolve();
+        return;
+      }
+      if (b.type === T_RAINBOW && a) {
+        clearTile(b, a.color);
+        moves++; setHUD(); queueResolve();
+        return;
+      }
+
+      // --- Normal match handling ---
       const matches = findMatches();
-
       if (matches.length === 0) {
-        // If one of the swapped tiles is a rainbow, activate it (clear all of the partner color)
-        const t1 = board[r1][c1], t2 = board[r2][c2];
-        if (t1 && t1.type === T_RAINBOW && t2) {
-          clearTile(t1);
-          moves++; setHUD(); queueResolve();
-          return;
-        }
-        if (t2 && t2.type === T_RAINBOW && t1) {
-          clearTile(t2);
-          moves++; setHUD(); queueResolve();
-          return;
-        }
-
-        // No match and no rainbow activation -> swap back
+        // No match → swap back
         swapTiles(a, b);
         await wait(180);
         return;
@@ -159,7 +489,9 @@
 
       moves++; setHUD();
       queueResolve();
-    }
+      }
+
+
 
     function setHUD(){ scoreEl.textContent = `Score: ${score}`; movesEl.textContent = `Moves: ${moves}`; }
     const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -263,177 +595,81 @@
   const isLT = tiles.length >= 5 && rowsMap.size > 1 && colsMap.size > 1;
 
   const specials = [];
-  if (maxLine >= 5) specials.push(T_RAINBOW);
+  // PRIORITY: supernova (6+) > rainbow (5+) > bomb (4) > star for L/T
+  if (maxLine >= 6) specials.push(T_SUPERNOVA);
+  else if (maxLine >= 5) specials.push(T_RAINBOW);
   else if (maxLine === 4) specials.push(T_BOMB);
   if (isLT) specials.push(T_STAR);
 
-  // Always return at least normal
-  return specials.length ? specials : [T_NORMAL];
-}
+  // Determine orientation of main long line: 'hor' or 'ver'
+  const orientation = (maxH >= maxV) ? 'hor' : 'ver';
 
-    async function resolveBoard(){
-  while (true){
-    const matches = findMatches();
-
-    // check if there's any tile already marked for clearing (e.g., rainbow activation called earlier)
-    let anyMarked = false;
-    for (let r = 0; r < N; r++){
-      for (let c = 0; c < N; c++){
-        if (board[r][c] && board[r][c].isClearing) { anyMarked = true; break; }
-      }
-      if (anyMarked) break;
-    }
-
-    // if no matches and nothing already marked, we're done
-    if (matches.length === 0 && !anyMarked) break;
-
-    const toClear = new Set();
-
-    // If matches exist, decide power-ups and which tiles to clear
-    for (const m of matches){
-      const specials = classifyMatch(m);
-
-// if we have any special(s)
-if (!(specials.length === 1 && specials[0] === T_NORMAL)) {
-  // All tiles in the match
-  let candidates = m.tiles.map(({r,c}) => board[r][c]).filter(Boolean);
-
-  // Pick "chosen" (prefer last-swap tile, else middle)
-  let chosen = null;
-  if (lastSwap){
-    for (const coord of m.tiles){
-      if ((coord.r===lastSwap.r1 && coord.c===lastSwap.c1) ||
-          (coord.r===lastSwap.r2 && coord.c===lastSwap.c2)){
-        chosen = board[coord.r][coord.c];
-        break;
-      }
-    }
-  }
-  if (!chosen){
-    const mid = m.tiles[Math.floor(m.tiles.length/2)];
-    chosen = board[mid.r][mid.c];
-  }
-
-  // Remove chosen from candidates
-  candidates = candidates.filter(t => t !== chosen);
-
-  // Reorder specials so ⭐ goes on the chosen gem if present
-  const ordered = specials.slice();
-  const starIdx = ordered.indexOf(T_STAR);
-  if (starIdx > -1) {
-    ordered.splice(starIdx, 1);
-    ordered.unshift(T_STAR);
-  }
-
-  // Manhattan-nearest to chosen for extras
-  const specialTargets = [];
-  function takeNearestToChosen(){
-    if (!chosen || candidates.length === 0) return null;
-    candidates.sort((a,b)=>{
-      const da = Math.abs(a.row - chosen.row) + Math.abs(a.col - chosen.col);
-      const db = Math.abs(b.row - chosen.row) + Math.abs(b.col - chosen.col);
-      return da - db;
-    });
-    return candidates.shift() || null;
-  }
-
-  // Assign specials: ⭐ on chosen (if present first), others to nearest tiles
-  ordered.forEach((sp, i) => {
-    const target = (i === 0) ? chosen : takeNearestToChosen();
-    if (!target) return;
-    target.type = sp;
-    target.el.firstChild.textContent = sp===T_BOMB ? "💣" : sp===T_STAR ? "⭐" : sp===T_RAINBOW ? "🌈" : "";
-    specialTargets.push(target);
-  });
-
-  // Clear all remaining tiles in this match that are not one of the special targets
-  const keepSet = new Set(specialTargets);
-  for (const {r,c} of m.tiles){
-    const t = board[r][c];
-    if (t && !keepSet.has(t)) {
-      toClear.add(r*N + c);
-    }
-  }
-  continue;
+  const res = (specials.length ? specials : [T_NORMAL]);
+  res.orientation = orientation;
+  return res;
 }
 
 
-      // normal: clear all tiles in the match
-      for (const coord of m.tiles) toClear.add(coord.r*N+coord.c);
-    }
+    function clearTile(t, forceColor=null){
+    if (!t) return;
+    if (t.isClearing) return; // already processed this tile
 
-    // Also include any tiles that were already marked
-    for (let r = 0; r < N; r++){
-      for (let c = 0; c < N; c++){
-        const t = board[r][c];
-        if (t && t.isClearing) toClear.add(r*N + c);
-      }
-    }
+    t.isClearing = true;
+    t.el.style.opacity = 0;
 
-    // Call clearTile on each coordinate we've decided to clear
-    for (const key of toClear){
-      const r = Math.floor(key/N), c = key%N;
-      const cur = board[r][c];
-      if (cur) clearTile(cur);
-    }
-
-    await wait(250);
-
-    // Remove cleared tiles
-    for (let r = 0; r < N; r++){
-      for (let c = 0; c < N; c++){
-        const cur = board[r][c];
-        if (cur && cur.isClearing){
-          cur.el.remove();
-          board[r][c] = null;
-          score += 10;
+    // Trigger power-up effects
+    if (t.type === T_BOMB){
+      for (let dr=-1; dr<=1; dr++) {
+        for (let dc=-1; dc<=1; dc++) {
+          const nr = t.row + dr, nc = t.col + dc;
+          if (inBounds(nr,nc) && board[nr][nc]) clearTile(board[nr][nc]);
         }
       }
     }
+    else if (t.type === T_STAR){
+      for (let i=0;i<N;i++){
+        if (board[t.row][i]) clearTile(board[t.row][i]);
+        if (board[i][t.col]) clearTile(board[i][t.col]);
+      }
+    } else if (t.type === T_SUPERNOVA){
+      const r0 = t.row, c0 = t.col;
+      for (let r=0; r<N; r++){
+        for (let dc=-1; dc<=1; dc++){
+          const cc = c0+dc;
+          if (inBounds(r,cc) && board[r][cc]) clearTile(board[r][cc]);
+        }
+      }
 
-    setHUD();
-    await collapseAndRefill();
-    await wait(120);
-  }
-}
-
-
-    function clearTile(t){
-  if (!t) return;
-  if (t.isClearing) return; // already processed this tile
-
-  t.isClearing = true;
-  t.el.style.opacity = 0;
-
-  // Trigger power-up effects
-  if (t.type === T_BOMB){
-    for (let dr=-1; dr<=1; dr++) {
-      for (let dc=-1; dc<=1; dc++) {
-        const nr = t.row + dr, nc = t.col + dc;
-        if (inBounds(nr,nc) && board[nr][nc]) clearTile(board[nr][nc]);
+      for (let c=0; c<N; c++){
+        for (let dr=-1; dr<=1; dr++){
+          const rr = r0+dr;
+          if (inBounds(rr,c) && board[rr][c]) clearTile(board[rr][c]);
+        }
       }
     }
-  }
-  else if (t.type === T_STAR){
-    for (let i=0;i<N;i++){
-      if (board[t.row][i]) clearTile(board[t.row][i]);
-      if (board[i][t.col]) clearTile(board[i][t.col]);
-    }
-  }
-  else if (t.type === T_RAINBOW){
-    if (lastSwap){
-      const p1 = board[lastSwap.r1]?.[lastSwap.c1] || null;
-      const p2 = board[lastSwap.r2]?.[lastSwap.c2] || null;
-      let partner = null;
-      if (p1 && p1 !== t && p1.type !== T_RAINBOW) partner = p1;
-      else if (p2 && p2 !== t && p2.type !== T_RAINBOW) partner = p2;
-      else partner = p1 || p2;
+    else if (t.type === T_RAINBOW){
+    let targetColor = forceColor;
 
-      if (partner){
-        const targetColor = partner.color;
-        for (let r=0;r<N;r++){
-          for (let c=0;c<N;c++){
-            if (board[r][c] && board[r][c].color === targetColor) clearTile(board[r][c]);
+    // If no color specified (e.g., hit by bomb/star), pick a random existing color
+    if (targetColor == null) {
+      const colorsOnBoard = [];
+      for (let r=0;r<N;r++){
+        for (let c=0;c<N;c++){
+          if (board[r][c] && board[r][c].color != null) {
+            colorsOnBoard.push(board[r][c].color);
+          }
+        }
+      }
+      if (colorsOnBoard.length > 0) {
+        targetColor = colorsOnBoard[Math.floor(Math.random()*colorsOnBoard.length)];
+      }
+    }
+
+    if (targetColor != null){
+      for (let r=0;r<N;r++){
+        for (let c=0;c<N;c++){
+          if (board[r][c] && board[r][c].color === targetColor){
+            clearTile(board[r][c]);
           }
         }
       }
