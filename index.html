@@ -81,34 +81,78 @@ body {
 .gem {
   width: calc(var(--size) - var(--gap));
   height: calc(var(--size) - var(--gap));
-  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(14px, 3.5vw, 24px);
+  position: relative;
   color: #fff;
   font-weight: bold;
+  overflow: hidden;
 }
 
-.c-0 { background: #ef4444; }
-.c-1 { background: #f59e0b; }
-.c-2 { background: #10b981; }
-.c-3 { background: #3b82f6; }
-.c-4 { background: #8b5cf6; }
-.c-5 { background: #ec4899; }
-.gem.rainbow { background: #9ca3af; }
+/* 🔴 Red: square */
+.c-0 {
+  background: radial-gradient(circle at 30% 30%, #ff4d4d, #ca0000);
+  clip-path: inset(0% round 6px);
+}
 
-/* scale board down only on smaller screens */
-@media (max-width: 600px) {
-  .wrap {
-    transform: scale(0.7);
-  }
+/* 🟡 Yellow: diamond (rotated square) */
+.c-1 {
+  background: radial-gradient(circle at 30% 30%, #ffe066, #db9d00);
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
 }
-@media (max-width: 400px) {
-  .wrap {
-    transform: scale(0.55);
-  }
+
+/* 🟢 Green: octagon */
+.c-2 {
+  background: radial-gradient(circle at 30% 30%, #66ff94, #00925a);
+  clip-path: polygon(50% 0%, 83% 12%, 100% 43%, 94% 78%, 68% 100%, 32% 100%, 6% 78%, 0% 43%, 17% 12%);
 }
+
+/* 🔵 Blue: elongated diamond (gemstone style) */
+.c-3 {
+  background: radial-gradient(circle at 30% 20%, #66aaff, #003f8f);
+  clip-path: polygon(70% 0, 100% 25%, 50% 100%, 0 25%, 30% 0);
+}
+
+/* 🟣 Purple: triangle */
+.c-4 {
+  background: radial-gradient(circle at 30% 30%, #b266ff, #4f00aa);
+  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+}
+
+/* 🟠 Orange: hexagon */
+.c-5 {
+  background: radial-gradient(circle at 30% 30%, #ff9933, #ca4300);
+  clip-path: polygon(25% 7%, 75% 7%, 100% 50%, 75% 93%, 26% 93%, 0% 50%);
+}
+.c-6 {
+  background: radial-gradient(circle at 30% 30%, #ffffff, #9e9e9e);
+  clip-path: circle(50% at 50% 50%);
+}
+
+/* Rainbow animated cube */
+.gem.rainbow { clip-path: polygon(20% 0, 80% 0, 100% 30%, 100% 80%, 80% 100%, 20% 100%, 0 80%, 0 30%); animation: rainbowShift 3s infinite linear; }
+@keyframes rainbowShift { 0%{background:red;}16%{background:orange;}32%{background:yellow;}48%{background:green;}64%{background:blue;}80%{background:indigo;}100%{background:violet;} }
+
+
+/* Bomb: flame ring */
+.gem.bomb::after { content:""; position:absolute; inset:-6px; border-radius:50%; border:3px solid orange; box-shadow:0 0 8px 3px red,0 0 16px 5px yellow; animation: flamePulse 1s infinite ease-in-out; }
+@keyframes flamePulse { 0%,100%{transform:scale(1);opacity:.7;}50%{transform:scale(1.2);opacity:1;} }
+
+
+/* Star: glowing T */
+.gem.star::before,.gem.star::after { content:""; position:absolute; background:rgba(255,255,0,0.8); box-shadow:0 0 12px 4px yellow; }
+.gem.star::before { width:70%; height:20%; top:40%; left:15%; }
+.gem.star::after { width:20%; height:70%; top:15%; left:40%; animation: glowPulse 1.2s infinite ease-in-out; }
+@keyframes glowPulse { 0%,100%{opacity:.8;}50%{opacity:1;} }
+
+
+/* Supernova: flame + glowing T */
+.gem.supernova::before { content:""; position:absolute; inset:-6px; border-radius:50%; border:3px solid orange; box-shadow:0 0 8px 3px red,0 0 16px 5px yellow; animation: flamePulse 1s infinite ease-in-out; }
+.gem.supernova::after { content:""; position:absolute; width:120%; height:120%; top:-10%; left:-10%; background:linear-gradient(to right,transparent 45%,rgba(255,255,0,0.7) 50%,transparent 55%),linear-gradient(to bottom,transparent 45%,rgba(255,255,0,0.7) 50%,transparent 55%); animation: glowPulse 1.2s infinite ease-in-out; }
+
+
+@media(max-width:600px){.wrap{transform:scale(.7);}} @media(max-width:400px){.wrap{transform:scale(.55);}}
 
 </style>
 </head>
@@ -123,7 +167,7 @@ body {
   </div>
 
   <script>
-    const N = 8, COLORS = 6, SIZE = 64;
+    const N = 8, COLORS = 7, SIZE = 64;
     const T_NORMAL = 'normal', T_BOMB = 'bomb', T_STAR = 'star', T_RAINBOW = 'rainbow', T_SUPERNOVA = 'supernova';
 
     let board = [];
@@ -149,6 +193,13 @@ body {
     }
 
     function styleTile(t){ t.el.style.transform = `translate(${t.col * SIZE}px,${t.row * SIZE}px)`; }
+    function setSpecialVisual(t){const gem=t.el.firstChild;gem.classList.remove('bomb','star','supernova','rainbow');if(t.type===T_BOMB)gem.classList.add('bomb');else if(t.type===T_STAR)gem.classList.add('star');else if(t.type===T_SUPERNOVA)gem.classList.add('supernova');else if(t.type===T_RAINBOW)gem.classList.add('rainbow');}
+
+    function assignSpecial(tile,type){
+      tile.type=type;
+      if(type===T_RAINBOW) tile.color=null;
+      setSpecialVisual(tile);
+    }
 
     function attachDragHandlers(t){
       let start = null, moved = false;
