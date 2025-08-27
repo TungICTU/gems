@@ -315,20 +315,121 @@ class Emitter{
   }
 }
 
-const Engine={particles:[],emitters:new Map(),lastTs:0,
-  resize(){fxCanvas.width=boardEl.clientWidth;fxCanvas.height=boardEl.clientHeight;},
-  addEmitter(tile,kind){this.emitters.set(tile._uid,new Emitter(tile,kind));},
-  removeEmitter(tile){if(tile?._uid)this.emitters.delete(tile._uid);},
-  burstAt(x,y,baseHue=0,count=20,spread=180){for(let i=0;i<count;i++){const ang=Math.random()*Math.PI*2;const spd=Math.random()*120+40;
-    const vx=Math.cos(ang)*spd,vy=Math.sin(ang)*spd;const hue=baseHue+(Math.random()*30-15);
-    this.particles.push(new Particle(x,y,vx,vy,3+Math.random()*3,hue,0,0.8+Math.random()*0.5,300,0.92,"circle","front"));}},
-  step(ts){if(!this.lastTs)this.lastTs=ts;const dt=Math.min(0.05,(ts-this.lastTs)/1000);this.lastTs=ts;this.resize();ctx.clearRect(0,0,fxCanvas.width,fxCanvas.height);
-    for(let i=this.particles.length-1;i>=0;i--){const p=this.particles[i];if(!p.step(dt)){this.particles[i]=this.particles[this.particles.length-1];this.particles.pop();}else if(p.layer==="back"){p.draw(ctx);}}
-    for(const e of this.emitters.values())e.step(this,dt);
-    for(let p of this.particles){if(p.layer==="front")p.draw(ctx);} requestAnimationFrame(this.step.bind(this));}
+const Engine = {
+  particles: [],
+  emitters: new Map(),
+  pendingBursts: [],   // queued burst requests
+  activeBursts: [],    // bursts currently being spawned in batches
+  pendingEmitters: [], // queued emitters
+  lastTs: 0,
+
+  resize() {
+    fxCanvas.width = boardEl.clientWidth;
+    fxCanvas.height = boardEl.clientHeight;
+  },
+
+  // queue emitter creation
+  addEmitter(tile, kind) {
+    if (tile?._uid) {
+      this.pendingEmitters.push({ tile, kind });
+    }
+  },
+
+  removeEmitter(tile) {
+    if (tile?._uid) this.emitters.delete(tile._uid);
+  },
+
+  // queue bursts instead of spawning immediately
+  burstAt(x, y, baseHue = 0, count = 20, spread = 180) {
+    this.pendingBursts.push({ x, y, baseHue, count, spread });
+  },
+
+  step(ts) {
+    if (!this.lastTs) this.lastTs = ts;
+    const dt = Math.min(0.05, (ts - this.lastTs) / 1000);
+    this.lastTs = ts;
+
+    this.resize();
+    ctx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+
+    // --- flush queued emitters ---
+    while (this.pendingEmitters.length > 0) {
+      const e = this.pendingEmitters.pop();
+      this.emitters.set(e.tile._uid, new Emitter(e.tile, e.kind));
+    }
+
+    // --- convert pending bursts into active bursts ---
+    while (this.pendingBursts.length > 0) {
+      const b = this.pendingBursts.pop();
+      this.activeBursts.push({
+        ...b,
+        remaining: b.count
+      });
+    }
+
+    // --- spawn active bursts in batches ---
+    const batchSize = 20; // adjust this for smoothness vs. speed
+    for (let i = this.activeBursts.length - 1; i >= 0; i--) {
+      const b = this.activeBursts[i];
+      const n = Math.min(batchSize, b.remaining);
+
+      for (let j = 0; j < n; j++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = Math.random() * 120 + 40;
+        const vx = Math.cos(ang) * spd;
+        const vy = Math.sin(ang) * spd;
+        const hue = b.baseHue + (Math.random() * 30 - 15);
+
+        this.particles.push(
+          new Particle(
+            b.x, b.y,
+            vx, vy,
+            3 + Math.random() * 3,
+            hue,
+            0,
+            0.8 + Math.random() * 0.5,
+            300,
+            0.92,
+            "circle",
+            "front"
+          )
+        );
+      }
+
+      b.remaining -= n;
+      if (b.remaining <= 0) {
+        this.activeBursts.splice(i, 1); // done
+      }
+    }
+
+    // --- update particles (back layer first) ---
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      if (!p.step(dt)) {
+        this.particles[i] = this.particles[this.particles.length - 1];
+        this.particles.pop();
+      } else if (p.layer === "back") {
+        p.draw(ctx);
+      }
+    }
+
+    // --- update emitters ---
+    for (const e of this.emitters.values()) {
+      e.step(this, dt);
+    }
+
+    // --- draw particles (front layer) ---
+    for (let p of this.particles) {
+      if (p.layer === "front") p.draw(ctx);
+    }
+
+    requestAnimationFrame(this.step.bind(this));
+  }
 };
+
 requestAnimationFrame(Engine.step.bind(Engine));
-    addEventListener('resize', () => Engine.resize());
+addEventListener("resize", () => Engine.resize());
+
 
     // --------- Game Logic (unchanged core, but visuals hooked into Engine) ----------
 
@@ -587,7 +688,7 @@ requestAnimationFrame(Engine.step.bind(Engine));
                 // burst particles at tile center before removal
                 const cx = c * SIZE + SIZE/2;
                 const cy = r * SIZE + SIZE/2;
-                Engine.burstAt(cx, cy, 40 + (cur.color ?? 0)*40, 24, 160);
+                Engine.burstAt(cx, cy, gemHues[cur.color ?? 0], 24, 160);
 
                 cur.el.remove();
                 Engine.removeEmitter(cur);
@@ -615,21 +716,21 @@ requestAnimationFrame(Engine.step.bind(Engine));
       const cy = t.row * SIZE + SIZE/2;
 
       if (t.type === T_BOMB){
-        Engine.burstAt(cx, cy, 30, 36, 200);
+        Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 36, 200);
         for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) {
           const nr = t.row + dr, nc = t.col + dc;
           if (inBounds(nr,nc) && board[nr][nc]) clearTile(board[nr][nc]);
         }
       }
       else if (t.type === T_STAR){
-        Engine.burstAt(cx, cy, 0, 40, 240);
+        Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 40, 240);
         for (let i=0;i<N;i++){
           if (board[t.row][i]) clearTile(board[t.row][i]);
           if (board[i][t.col]) clearTile(board[i][t.col]);
         }
       }
       else if (t.type === T_SUPERNOVA){
-        Engine.burstAt(cx, cy, 35, 80, 320);
+        Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 80, 320);
         const r0 = t.row, c0 = t.col;
         for (let r=0; r<N; r++){
           for (let dc=-1; dc<=1; dc++){
@@ -645,7 +746,9 @@ requestAnimationFrame(Engine.step.bind(Engine));
         }
       }
       else if (t.type === T_RAINBOW){
-        Engine.burstAt(cx, cy, 200, 60, 260);
+        Object.values(gemHues).forEach(hue => {
+          Engine.burstAt(cx, cy, hue, 15, 200); // smaller bursts per color
+        });
         let targetColor = forceColor;
         if (targetColor == null) {
           const colorsOnBoard = [];
