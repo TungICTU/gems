@@ -3,988 +3,506 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Match-3 — Power-Ups (Canvas Particles, Optimized)</title>
+  <title>Match-3</title>
   <style>
 :root { --size: 64px; --gap: 6px; --n: 8; }
-
 * { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  min-height: 100vh;
-  background: #adc0ff;
-  font-family: sans-serif;
-  padding: 10px;
-}
-
-.wrap {
-  width: calc(var(--size) * var(--n));
-  user-select: none;
-  transform-origin: top center;
-}
-
-.hud {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.pill {
-  padding: 6px 10px;
-  border-radius: 12px;
-  background: #fff;
-  border: 1px solid #ccc;
-  font-weight: 700;
-  font-size: clamp(12px, 2.5vw, 20px);
-}
-
-.board {
-  position: relative;
-  width: calc(var(--size) * var(--n));
-  height: calc(var(--size) * var(--n));
-  background: #adc0ff;
-  border: 1px solid #ddd;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-/* particle canvas overlay */
-.fx-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 5; /* above tiles */
-}
-
-.cell-bg {
-  position: absolute;
-  width: var(--size);
-  height: var(--size);
-  border: 1px solid rgba(0,0,0,0.05);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.tile {
-  position: absolute;
-  width: var(--size);
-  height: var(--size);
-  display: grid;
-  place-items: center;
-  transition: transform 180ms ease, opacity 160ms ease;
-  z-index: 1;
-  font-size: clamp(20px, 4vw, 28px);
-  perspective: 600px;
-}
-
+body { margin: 0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; background: #adc0ff; font-family: sans-serif; padding: 10px; }
+.wrap { width: calc(var(--size) * var(--n)); user-select: none; transform-origin: top center; }
+.hud { display: flex; justify-content: space-between; margin-bottom: 10px; gap: 6px; flex-wrap: wrap; }
+.pill { padding: 6px 10px; border-radius: 12px; background: #fff; border: 1px solid #ccc; font-weight: 700; font-size: clamp(12px, 2.5vw, 20px); }
+.board { position: relative; width: calc(var(--size) * var(--n)); height: calc(var(--size) * var(--n)); background: #adc0ff; border: 1px solid #ddd; border-radius: 12px; overflow: hidden; transition: filter 240ms ease, opacity 240ms ease; }
+.board.blurred { filter: blur(6px) saturate(.6); pointer-events: none; user-select: none; }
+.fx-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.cell-bg { position: absolute; width: var(--size); height: var(--size); border: 1px solid rgba(0,0,0,0.05); pointer-events: none; z-index: 0; }
+.tile { position: absolute; width: var(--size); height: var(--size); display: grid; place-items: center; transition: transform 180ms ease, opacity 160ms ease; z-index: 1; font-size: clamp(20px, 4vw, 28px); perspective: 600px; }
 .tile.falling { z-index: 3; }
 .tile.moving { z-index: 2; }
 .tile.dragging { z-index: 10; transform: scale(1.06); }
+.gem { z-index: 1; width: calc(var(--size) - var(--gap)); height: calc(var(--size) - var(--gap)); display: flex; align-items: center; justify-content: center; position: relative; color: #fff; font-weight: bold; overflow: hidden; }
 
-.gem {
-  z-index: 1;
-  width: calc(var(--size) - var(--gap));
-  height: calc(var(--size) - var(--gap));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  color: #fff;
-  font-weight: bold;
-  overflow: hidden;
-}
+/* progress bar styles */
+.progress-wrap { margin-top: 12px; display:flex; align-items:center; gap:10px; }
+.progress-bar { flex: 1; height: 18px; background: #fff; border: 1px solid #ccc; border-radius: 12px; overflow: hidden; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6); }
+.progress-fill { height: 100%; width: 0%; transition: width 350ms ease; background: linear-gradient(90deg, #66ff94, #66aaff); box-shadow: 0 4px 12px rgba(0,0,0,0.08) inset; }
+.progress-text { min-width: 90px; text-align: right; font-weight: 700; font-size: 14px; color: #083; }
 
-/* 🔴 Red: square */
-.c-0 {
-  background: radial-gradient(circle at 30% 30%, #ff4d4d, #ca0000);
-  clip-path: inset(0% round 6px);
-}
+/* no-moves overlay */
+#noMovesOverlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:20; pointer-events:none; opacity:0; transition:opacity 220ms ease; }
+#noMovesOverlay.active { pointer-events:auto; opacity:1; }
+.noMovesBox { background: rgba(0,0,0,0.55); padding: 30px 36px; border-radius:14px; text-align:center; color: #fff; box-shadow: 0 8px 40px rgba(0,0,0,0.45); transform: translateY(-6px); }
+.noMovesBox h1 { margin: 0 0 8px 0; font-size: 36px; letter-spacing: 0.5px; }
+.noMovesBox p { margin: 0 0 12px 0; opacity: .9; }
+.noMovesBox button { padding: 8px 14px; border-radius: 10px; background: #fff; border: none; font-weight: 700; cursor: pointer; }
 
-/* 🟡 Yellow: diamond (rotated square) */
-.c-1 {
-  background: radial-gradient(circle at 30% 30%, #ffe066, #db9d00);
-  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
-}
-
-/* 🟢 Green: octagon */
-.c-2 {
-  background: radial-gradient(circle at 30% 30%, #66ff94, #00925a);
-  clip-path: polygon(50% 0%, 83% 12%, 100% 43%, 94% 78%, 68% 100%, 33.1% 100%, 6% 78%, 0 43%, 17% 12%);
-}
-
-/* 🔵 Blue: elongated diamond (gemstone style) */
-.c-3 {
-  background: radial-gradient(circle at 30% 20%, #66aaff, #003f8f);
-  clip-path: polygon(70% 0, 100% 25%, 50% 100%, 0 25%, 30% 0);
-}
-
-/* 🟣 Purple: triangle */
-.c-4 {
-  background: radial-gradient(circle at 30% 30%, #b266ff, #4f00aa);
-  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
-}
-
-/* 🟠 Orange: hexagon */
-.c-5 {
-  background: radial-gradient(circle at 30% 30%, #ff9933, #ca4300);
-  clip-path: polygon(25% 7%, 75% 7%, 100% 50%, 75% 93%, 26% 93%, 0% 50%);
-}
-
-/* ⚪ White: circle */
-.c-6 {
-  background: radial-gradient(circle at 30% 30%, #ffffff, #9e9e9e);
-  clip-path: circle(50% at 50% 50%);
-}
-
-/* --- rainbow: cube core (kept for style) --- */
-.gem.rainbow {
-  position: relative;
-  width: 70%;
-  height: 70%;
-  background: transparent;
-  overflow: visible;
-  transform-style: preserve-3d;
-}
-
-.gem.rainbow .cube {
-  --cube-size: 40px;
-  position: absolute;
-  top: 50%; left: 50%;
-  width: var(--cube-size);
-  height: var(--cube-size);
-  transform-style: preserve-3d;
-  transform: translate(-50%, -50%) rotateZ(45deg);
-  animation: spinY 3000ms linear infinite;
-  z-index: 1;
-}
-
-.gem.rainbow .cube .face {
-  position: absolute;
-  width: var(--cube-size);
-  height: var(--cube-size);
-  top: 0; left: 0;
-  backface-visibility: hidden;
-  border-radius: 6px;
-  background: conic-gradient(from 180deg,
-    #ff4d4d 0%,
-    #ff9933 15%,
-    #ffe066 30%,
-    #66ff94 50%,
-    #66aaff 70%,
-    #b266ff 85%,
-    #ff4d4d 100%);
-  box-shadow: 0 0 18px 6px rgba(255,255,255,0.45), 0 6px 10px rgba(0,0,0,0.15);
-}
-.gem.rainbow .cube .front  { transform: translateZ(calc(var(--cube-size) / 2)); }
-.gem.rainbow .cube .back   { transform: rotateY(180deg) translateZ(calc(var(--cube-size) / 2)); }
-.gem.rainbow .cube .right  { transform: rotateY(90deg) translateZ(calc(var(--cube-size) / 2)); }
-.gem.rainbow .cube .left   { transform: rotateY(-90deg) translateZ(calc(var(--cube-size) / 2)); }
-.gem.rainbow .cube .top    { transform: rotateX(90deg) translateZ(calc(var(--cube-size) / 2)); }
-.gem.rainbow .cube .bottom { transform: rotateX(-90deg) translateZ(calc(var(--cube-size) / 2)); }
-
-@keyframes spinY {
-  from { transform: translate(-50%, -50%) rotateY(0deg) rotateZ(45deg) rotateX(45deg); }
-  to   { transform: translate(-50%, -50%) rotateY(360deg) rotateZ(45deg) rotateX(45deg); }
-}
-
-/* Star: glowing T */
-.gem.star::before,.gem.star::after { content:""; position:absolute; background:rgba(255, 255, 255); box-shadow:0 0 12px 4px rgb(255, 255, 255); }
-.gem.star::before { width:70%; height:20%; top:40%; left:15%; }
-.gem.star::after { width:20%; height:70%; top:15%; left:40%; animation: starPulse 1.2s infinite ease-in-out; }
-@keyframes starPulse { 0%,100%{opacity:.8;}50%{opacity:1;} }
-
-/* Supernova: flame + glowing T */
-.gem.supernova::before,
-.gem.supernova::after {
-  content: "";
-  position: absolute;
-  background: rgba(255, 255, 255);
-  box-shadow: 0 0 20px 6px rgb(255, 255, 255);
-}
-.gem.supernova::before { width: 80%; height: 20%; top: 40%; left: 10%; }
-.gem.supernova::after  { width: 20%; height: 80%; top: 10%; left: 40%; animation: starPulse 1.2s infinite ease-in-out; }
-
-@media(max-width:600px){.wrap{transform:scale(.7);}}
-@media(max-width:400px){.wrap{transform:scale(.55);}}
+ /* color classes (unchanged) */
+.c-0{background:radial-gradient(circle at 30% 30%,#ff4d4d,#ca0000);clip-path:inset(0% round 6px);} .c-1{background:radial-gradient(circle at 30% 30%,#ffe066,#db9d00);clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);} .c-2{background:radial-gradient(circle at 30% 30%,#66ff94,#00925a);clip-path:polygon(50% 0%,83% 12%,100% 43%,94% 78%,68% 100%,33.1% 100%,6% 78%,0 43%,17% 12%);} .c-3{background:radial-gradient(circle at 30% 20%,#66aaff,#003f8f);clip-path:polygon(70% 0,100% 25%,50% 100%,0 25%,30% 0);} .c-4{background:radial-gradient(circle at 30% 30%,#b266ff,#4f00aa);clip-path:polygon(50% 0%,100% 100%,0% 100%);} .c-5{background:radial-gradient(circle at 30% 30%,#ff9933,#ca4300);clip-path:polygon(25% 7%,75% 7%,100% 50%,75% 93%,26% 93%,0% 50%);} .c-6{background:radial-gradient(circle at 30% 30%,#ffffff,#9e9e9e);clip-path:circle(50% at 50% 50%);} .gem.rainbow{position:relative;width:70%;height:70%;background:transparent;overflow:visible;transform-style:preserve-3d;} 
+.gem.rainbow .cube{--cube-size:40px;position:absolute;top:50%;left:50%;width:var(--cube-size);height:var(--cube-size);transform-style:preserve-3d;transform:translate(-50%,-50%) rotateZ(45deg);animation:spinY 3000ms linear infinite;z-index:1;} .gem.rainbow .cube .face{position:absolute;width:var(--cube-size);height:var(--cube-size);top:0;left:0;backface-visibility:hidden;border-radius:6px;background:conic-gradient(from 180deg,#ff4d4d 0%,#ff9933 15%,#ffe066 30%,#66ff94 50%,#66aaff 70%,#b266ff 85%,#ff4d4d 100%);box-shadow:0 0 18px 6px rgba(255,255,255,0.45),0 6px 10px rgba(0,0,0,0.15);} .gem.rainbow .cube .front{transform:translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .back{transform:rotateY(180deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .right{transform:rotateY(90deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .left{transform:rotateY(-90deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .top{transform:rotateX(90deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .bottom{transform:rotateX(-90deg) translateZ(calc(var(--cube-size)/2));}@keyframes spinY{from{transform:translate(-50%,-50%) rotateY(0deg) rotateZ(45deg) rotateX(45deg);}to{transform:translate(-50%,-50%) rotateY(360deg) rotateZ(45deg) rotateX(45deg);}}
+.gem.star::before,.gem.star::after{content:"";position:absolute;background:rgba(255,255,255);box-shadow:0 0 12px 4px rgb(255,255,255);} .gem.star::before{width:70%;height:20%;top:40%;left:15%;} .gem.star::after{width:20%;height:70%;top:15%;left:40%;animation:starPulse 1.2s infinite ease-in-out;} @keyframes starPulse{0%,100%{opacity:.8;}50%{opacity:1;}}
+.gem.supernova::before,.gem.supernova::after{content:"";position:absolute;background:rgba(255,255,255);box-shadow:0 0 20px 6px rgb(255,255,255);} .gem.supernova::before{width:80%;height:20%;top:40%;left:10%;} .gem.supernova::after{width:20%;height:80%;top:10%;left:40%;animation:starPulse 1.2s infinite ease-in-out;}
+@media(max-width:600px){.wrap{transform:scale(.7);}} @media(max-width:400px){.wrap{transform:scale(.55);}}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="hud">
-      <div class="pill" id="score">Score: 0</div>
-      <div class="pill" id="moves">Moves: 0</div>
+      <div class="pill" id="level">Level: 1</div>
       <button class="pill" id="reset">New Game</button>
     </div>
+
     <div class="board" id="board">
       <canvas id="fx" class="fx-layer"></canvas>
+      <!-- overlay for "no more moves" (positioned inside board so it centers correctly) -->
+      <div id="noMovesOverlay" aria-hidden="true">
+        <div class="noMovesBox" role="dialog" aria-modal="true">
+          <h1>No more moves</h1>
+          <p>Tap New Game to try again.</p>
+          <button id="overlayReset">New Game</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- progress bar below the board (replaces textual score/target display) -->
+    <div class="progress-wrap" aria-hidden="false">
+      <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+      <div id="progress-text" class="progress-text">0% (0 / 2000)</div>
     </div>
   </div>
 
   <script>
-    const N = 8, COLORS = 7, SIZE = 64;
+    // ---------- Config & cached DOM ----------
+    const N = 8, COLORS = 7;
+    const SIZE = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--size')) || 64;
     const T_NORMAL = 'normal', T_BOMB = 'bomb', T_STAR = 'star', T_RAINBOW = 'rainbow', T_SUPERNOVA = 'supernova';
 
-    let board = [];
-    let lastSwap = null;
-    let score = 0, moves = 0;
+    let level = 1, targetScore = 2000, base = 50;
+    let board = [], lastSwap = null, score = 0;
     let resolving = false, resolveQueued = false;
-    let tileUID = 1; // for emitter mapping
+    let tileUID = 1;
+    let levelStartScore = 0; // track starting score for current level
+    let gameLocked = false; // true when no more moves (board blurred / non-interactive)
 
     const boardEl = document.getElementById('board');
-    const scoreEl = document.getElementById('score');
-    const movesEl = document.getElementById('moves');
+    const levelEl = document.getElementById('level');
+    const resetBtn = document.getElementById('reset');
+    const overlayResetBtn = document.getElementById('overlayReset');
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+    const noMovesOverlay = document.getElementById('noMovesOverlay');
 
-    const fxCanvas=document.getElementById("fx");const ctx=fxCanvas.getContext("2d",{alpha:true});
+    const fxCanvas = document.getElementById('fx');
+    const ctx = fxCanvas.getContext('2d', { alpha: true });
 
-// gem type -> hue map for colored explosions
-const gemHues={0:0,1:50,2:140,3:210,4:280,5:30,6:0};
+    const gemHues = {0:0,1:50,2:140,3:210,4:280,5:30,6:0};
 
-class Particle{
-  constructor(x,y,vx,vy,size,hue,life,maxLife,gravity=0,drag=1,type="circle",layer="front"){
-    Object.assign(this,{x,y,vx,vy,size,hue,life,maxLife,gravity,drag,type,layer});
-  }
-  step(dt){this.vx*=this.drag;this.vy=this.vy*this.drag+this.gravity*dt;this.x+=this.vx*dt;this.y+=this.vy*dt;this.life+=dt;return this.life<this.maxLife;}
-  draw(ctx){const alpha=1-(this.life/this.maxLife);ctx.globalAlpha=Math.max(0,alpha);
-    if(this.type==="flame"){ctx.fillStyle=`hsla(${this.hue},100%,60%,${alpha})`;ctx.shadowBlur=15;ctx.shadowColor=ctx.fillStyle;ctx.beginPath();ctx.ellipse(this.x,this.y,this.size*0.5,this.size*1.8,0,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;}
-    else if (this.type === "burststar") {
-  ctx.save();
-  ctx.translate(this.x, this.y);
-  const progress = this.life / this.maxLife;
-  const alpha2 = 1 - progress;
-  ctx.globalAlpha = alpha2;
-
-  const spikes = 8;
-  const outer = this.size * (1 + progress * 3);
-  ctx.strokeStyle = `rgba(255,255,255,${alpha2})`;
-  ctx.lineWidth = 2;
-  ctx.shadowBlur = 20;
-  ctx.shadowColor = "#ffffff";
-
-  ctx.beginPath();
-  for (let i = 0; i < spikes; i++) {
-    const ang = (i / spikes) * Math.PI * 2;
-    const px = Math.cos(ang) * outer;
-    const py = Math.sin(ang) * outer;
-    ctx.moveTo(0, 0);
-    ctx.lineTo(px, py);
-  }
-  ctx.stroke();
-  ctx.restore();
-  ctx.shadowBlur = 0;
-}
-    else{ctx.fillStyle=`hsla(${this.hue},100%,70%,${alpha})`;ctx.shadowBlur=15;ctx.shadowColor=ctx.fillStyle;ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;}
-    ctx.globalAlpha=1;}
-}
-
-class Emitter{
-  constructor(tile,kind){this.tile=tile;this.kind=kind;this.t=0;}
-  center(){return{x:this.tile.col*64+32,y:this.tile.row*64+32};}
-  step(engine,dt){const {x,y}=this.center();this.t+=dt*3;
-    if(this.kind==="rainbow"){
-      const count=12,orbitR=30,balls=[];
-      for(let i=0;i<count;i++){const angle=(i/count)*Math.PI*2+this.t;
-        const y3d=Math.sin(this.t*0.5+i)*12;const x3d=Math.cos(angle)*orbitR;const z3d=Math.sin(angle)*orbitR;
-        const persp=120/(120+z3d);const px=x+x3d*persp,py=y+y3d*persp,size=4*persp;
-        balls.push({px,py,size,z3d,hue:(i*30)%360});}
-      balls.sort((a,b)=>a.z3d-b.z3d);
-      for(const b of balls){ctx.globalAlpha=b.z3d<0?0.5:1;ctx.fillStyle=`hsl(${b.hue},100%,70%)`;ctx.shadowBlur=20;ctx.shadowColor=ctx.fillStyle;ctx.beginPath();ctx.arc(b.px,b.py,b.size,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;}ctx.globalAlpha=1;
-    } else if(this.kind==="bomb"||this.kind==="supernova"){
-      const radius=24; if(Math.random()<0.6){const angle=Math.random()*Math.PI*2;
-        const px=x+Math.cos(angle)*radius;const py=y+10+Math.sin(angle)*radius;
-        engine.particles.push(new Particle(px,py,(Math.random()-0.5)*15,-30-Math.random()*20,5+Math.random()*3,20+Math.random()*20,0,0.8+Math.random()*0.4,50,0.96,"flame","back"));}
-    } else if (this.kind === "star") {
-  if (Math.random() < 0.05) { // emit occasionally
-    engine.particles.push(new Particle(
-      x, y,
-      0, 0,
-      10, // base size
-      0,  // hue not used (white)
-      0,
-      0.8, // maxLife in seconds
-      0, 1,
-      "burststar",
-      "front"
-    ));
-  }
-}
-  }
-}
-
-const Engine = {
-  particles: [],
-  emitters: new Map(),
-  pendingBursts: [],   // queued burst requests
-  activeBursts: [],    // bursts currently being spawned in batches
-  pendingEmitters: [], // queued emitters
-  lastTs: 0,
-
-  resize() {
-    fxCanvas.width = boardEl.clientWidth;
-    fxCanvas.height = boardEl.clientHeight;
-  },
-
-  // queue emitter creation
-  addEmitter(tile, kind) {
-    if (tile?._uid) {
-      this.pendingEmitters.push({ tile, kind });
-    }
-  },
-
-  removeEmitter(tile) {
-    if (tile?._uid) this.emitters.delete(tile._uid);
-  },
-
-  // queue bursts instead of spawning immediately
-  burstAt(x, y, baseHue = 0, count = 20, spread = 180) {
-    this.pendingBursts.push({ x, y, baseHue, count, spread });
-  },
-
-  step(ts) {
-    if (!this.lastTs) this.lastTs = ts;
-    const dt = Math.min(0.05, (ts - this.lastTs) / 1000);
-    this.lastTs = ts;
-
-    this.resize();
-    ctx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
-
-    // --- flush queued emitters ---
-    while (this.pendingEmitters.length > 0) {
-      const e = this.pendingEmitters.pop();
-      this.emitters.set(e.tile._uid, new Emitter(e.tile, e.kind));
-    }
-
-    // --- convert pending bursts into active bursts ---
-    while (this.pendingBursts.length > 0) {
-      const b = this.pendingBursts.pop();
-      this.activeBursts.push({
-        ...b,
-        remaining: b.count
-      });
-    }
-
-    // --- spawn active bursts in batches ---
-    const batchSize = 20; // adjust this for smoothness vs. speed
-    for (let i = this.activeBursts.length - 1; i >= 0; i--) {
-      const b = this.activeBursts[i];
-      const n = Math.min(batchSize, b.remaining);
-
-      for (let j = 0; j < n; j++) {
-        const ang = Math.random() * Math.PI * 2;
-        const spd = Math.random() * 120 + 40;
-        const vx = Math.cos(ang) * spd;
-        const vy = Math.sin(ang) * spd;
-        const hue = b.baseHue + (Math.random() * 30 - 15);
-
-        this.particles.push(
-          new Particle(
-            b.x, b.y,
-            vx, vy,
-            3 + Math.random() * 3,
-            hue,
-            0,
-            0.8 + Math.random() * 0.5,
-            300,
-            0.92,
-            "circle",
-            "front"
-          )
-        );
+    // ---------- Lightweight particle system (optimized) ----------
+    class Particle {
+      constructor(x,y,vx,vy,size,hue,life,maxLife,gravity=0,drag=1,type='circle',layer='front'){
+        Object.assign(this,{x,y,vx,vy,size,hue,life,maxLife,gravity,drag,type,layer});
       }
+      step(dt){ this.vx *= this.drag; this.vy = this.vy * this.drag + this.gravity * dt; this.x += this.vx * dt; this.y += this.vy * dt; this.life += dt; return this.life < this.maxLife; }
+      draw(ctx){ const alpha = Math.max(0,1 - (this.life/this.maxLife)); ctx.globalAlpha = alpha; if(this.type==='flame'){ ctx.fillStyle = `hsla(${this.hue},100%,60%,${alpha})`; ctx.shadowBlur = 15; ctx.shadowColor = ctx.fillStyle; ctx.beginPath(); ctx.ellipse(this.x,this.y,this.size*0.5,this.size*1.8,0,0,Math.PI*2); ctx.fill(); ctx.shadowBlur = 0; }
+        else if (this.type==='burststar'){ ctx.save(); ctx.translate(this.x,this.y); const progress = this.life/this.maxLife; const alpha2 = 1-progress; ctx.globalAlpha = alpha2; const spikes = 8; const outer = this.size*(1 + progress*3); ctx.strokeStyle = `rgba(255,255,255,${alpha2})`; ctx.lineWidth = 2; ctx.shadowBlur = 20; ctx.shadowColor = '#ffffff'; ctx.beginPath(); for(let i=0;i<spikes;i++){ const ang=(i/spikes)*Math.PI*2; const px=Math.cos(ang)*outer; const py=Math.sin(ang)*outer; ctx.moveTo(0,0); ctx.lineTo(px,py);} ctx.stroke(); ctx.restore(); ctx.shadowBlur = 0; }
+        else{ ctx.fillStyle = `hsla(${this.hue},100%,70%,${alpha})`; ctx.shadowBlur = 15; ctx.shadowColor = ctx.fillStyle; ctx.beginPath(); ctx.arc(this.x,this.y,this.size,0,Math.PI*2); ctx.fill(); ctx.shadowBlur = 0; }
+        ctx.globalAlpha = 1; }
+    }
 
-      b.remaining -= n;
-      if (b.remaining <= 0) {
-        this.activeBursts.splice(i, 1); // done
+    class Emitter {
+      constructor(tile, kind){ this.tile = tile; this.kind = kind; this.t = 0; }
+      center(){ return { x: this.tile.col * SIZE + SIZE/2, y: this.tile.row * SIZE + SIZE/2 }; }
+      step(engine, dt){ const c = this.center(); this.t += dt * 3;
+        if (this.kind === 'rainbow'){
+          const count = 12, orbitR = 30, balls = [];
+          for(let i=0;i<count;i++){ const angle = (i/count)*Math.PI*2 + this.t; const y3d = Math.sin(this.t*0.5 + i) * 12; const x3d = Math.cos(angle) * orbitR; const z3d = Math.sin(angle) * orbitR; const persp = 120 / (120 + z3d); const px = c.x + x3d * persp, py = c.y + y3d * persp, size = 4 * persp; balls.push({ px, py, size, z3d, hue: (i*30) % 360 }); }
+          balls.sort((a,b) => a.z3d - b.z3d);
+          for(const b of balls){ ctx.globalAlpha = b.z3d < 0 ? 0.5 : 1; ctx.fillStyle = `hsl(${b.hue},100%,70%)`; ctx.shadowBlur = 20; ctx.shadowColor = ctx.fillStyle; ctx.beginPath(); ctx.arc(b.px, b.py, b.size, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0; }
+          ctx.globalAlpha = 1;
+        } else if (this.kind === 'bomb' || this.kind === 'supernova'){
+          if (Math.random() < 0.6) engine.particles.push(new Particle(c.x + (Math.random()*2-1)*24, c.y + 10 + (Math.random()*2-1)*24, (Math.random()-0.5)*15, -30 - Math.random()*20, 5 + Math.random()*3, 20 + Math.random()*20, 0, 0.8 + Math.random()*0.4, 50, 0.96, 'flame', 'back'));
+        } else if (this.kind === 'star'){
+          if (Math.random() < 0.05) engine.particles.push(new Particle(c.x, c.y, 0, 0, 10, 0, 0, 0.8, 0, 1, 'burststar', 'front'));
+        }
       }
     }
 
-    // --- update particles (back layer first) ---
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      if (!p.step(dt)) {
-        this.particles[i] = this.particles[this.particles.length - 1];
-        this.particles.pop();
-      } else if (p.layer === "back") {
-        p.draw(ctx);
+    const Engine = {
+      particles: [],
+      emitters: new Map(),
+      pendingBursts: [],
+      activeBursts: [],
+      pendingEmitters: [],
+      lastTs: 0,
+
+      resize() {
+        const w = boardEl.clientWidth, h = boardEl.clientHeight;
+        if (fxCanvas.width !== w || fxCanvas.height !== h) {
+          fxCanvas.width = w; fxCanvas.height = h;
+        }
+      },
+
+      addEmitter(tile, kind) { if (tile?._uid) this.pendingEmitters.push({ tile, kind }); },
+      removeEmitter(tile) { if (tile?._uid) this.emitters.delete(tile._uid); },
+
+      burstAt(x, y, baseHue = 0, count = 20, spread = 180) { this.pendingBursts.push({ x, y, baseHue, count, spread }); },
+
+      step(ts){ if (!this.lastTs) this.lastTs = ts; const dt = Math.min(0.05, (ts - this.lastTs) / 1000); this.lastTs = ts;
+        this.resize(); ctx.clearRect(0,0,fxCanvas.width,fxCanvas.height);
+
+        while (this.pendingEmitters.length) {
+          const e = this.pendingEmitters.pop(); this.emitters.set(e.tile._uid, new Emitter(e.tile, e.kind));
+        }
+
+        while (this.pendingBursts.length) {
+          const b = this.pendingBursts.pop(); this.activeBursts.push({ ...b, remaining: b.count });
+        }
+
+        const BATCH = 20;
+        for (let i = this.activeBursts.length - 1; i >= 0; i--) {
+          const b = this.activeBursts[i]; const n = Math.min(BATCH, b.remaining);
+          for (let j=0;j<n;j++){ const ang = Math.random()*Math.PI*2; const spd = Math.random()*120 + 40; const vx = Math.cos(ang)*spd; const vy = Math.sin(ang)*spd; const hue = b.baseHue + (Math.random()*30 - 15);
+            this.particles.push(new Particle(b.x, b.y, vx, vy, 3 + Math.random()*3, hue, 0, 0.8 + Math.random()*0.5, 300, 0.92, 'circle', 'front'));
+          }
+          b.remaining -= n; if (b.remaining <= 0) this.activeBursts.splice(i,1);
+        }
+
+        // update back-layer particles (iterate backwards to allow pop swap)
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+          const p = this.particles[i]; if (!p.step(dt)) { this.particles[i] = this.particles[this.particles.length - 1]; this.particles.pop(); }
+          else if (p.layer === 'back') p.draw(ctx);
+        }
+
+        // emitters
+        for (const e of this.emitters.values()) e.step(this, dt);
+
+        // front-layer particles
+        for (let i = 0; i < this.particles.length; i++) { const p = this.particles[i]; if (p.layer === 'front') p.draw(ctx); }
+
+        requestAnimationFrame(this.step.bind(this));
       }
-    }
+    };
 
-    // --- update emitters ---
-    for (const e of this.emitters.values()) {
-      e.step(this, dt);
-    }
+    // start engine
+    requestAnimationFrame(Engine.step.bind(Engine));
+    addEventListener('resize', () => Engine.resize());
 
-    // --- draw particles (front layer) ---
-    for (let p of this.particles) {
-      if (p.layer === "front") p.draw(ctx);
-    }
-
-    requestAnimationFrame(this.step.bind(this));
-  }
-};
-
-requestAnimationFrame(Engine.step.bind(Engine));
-addEventListener("resize", () => Engine.resize());
-
-
-    // --------- Game Logic (unchanged core, but visuals hooked into Engine) ----------
-
+    // ---------- Game core (optimized where it matters) ----------
     const randInt = n => Math.floor(Math.random() * n);
-    const inBounds = (r, c) => r >= 0 && r < N && c >= 0 && c < N;
+    const inBounds = (r,c) => r >= 0 && r < N && c >= 0 && c < N;
 
-    function makeTile(r, c, color = randInt(COLORS)){
-      const el = document.createElement('div'); el.className = 'tile';
-      const gem = document.createElement('div'); gem.className = `gem c-${color}`; el.appendChild(gem);
-      boardEl.appendChild(el);
+    function styleTile(t){ t.el.style.transform = `translate3d(${t.col * SIZE}px, ${t.row * SIZE}px, 0)`; }
+
+    function createCubeMesh(gem){ if (gem.querySelector('.cube')) return; const cube = document.createElement('div'); cube.className = 'cube'; ['front','back','right','left','top','bottom'].forEach(side=>{ const f = document.createElement('div'); f.className = 'face ' + side; cube.appendChild(f); }); gem.appendChild(cube); }
+
+    function makeTile(r,c,color = randInt(COLORS), container = boardEl){
+      const el = document.createElement('div');
+      el.className = 'tile';
+      const gem = document.createElement('div');
+      gem.className = `gem c-${color}`;
+      el.appendChild(gem);
+
       const t = { row: r, col: c, color, type: T_NORMAL, el, isClearing: false, _uid: tileUID++ };
       styleTile(t);
       attachDragHandlers(t);
+      container.appendChild(el);
+
+      // <-- add this line so the DOM element references back to the tile object
+      el._tile = t;
+
       return t;
     }
 
-    function styleTile(t){ t.el.style.transform = `translate(${t.col * SIZE}px,${t.row * SIZE}px)`; }
-
-    function createCubeMesh(gem) {
-      if (gem.querySelector('.cube')) return;
-      const cube = document.createElement('div');
-      cube.className = 'cube';
-      ['front','back','right','left','top','bottom'].forEach(side => {
-        const f = document.createElement('div');
-        f.className = 'face ' + side;
-        cube.appendChild(f);
-      });
-      gem.appendChild(cube);
+    function setSpecialVisual(t){ const tileEl = t.el; const gem = tileEl.firstChild; if (!gem) return; Engine.removeEmitter(t);
+      gem.className = (t.color == null) ? 'gem' : `gem c-${t.color}`; gem.innerHTML = '';
+      if (t.type === T_BOMB) Engine.addEmitter(t, T_BOMB);
+      else if (t.type === T_STAR) { gem.classList.add('star'); Engine.addEmitter(t, T_STAR); }
+      else if (t.type === T_SUPERNOVA) { gem.classList.add('supernova'); Engine.addEmitter(t, T_SUPERNOVA); }
+      else if (t.type === T_RAINBOW) { gem.className = 'gem rainbow'; createCubeMesh(gem); Engine.addEmitter(t, T_RAINBOW); }
     }
 
-    // Centralized visual + emitter setup
-    function setSpecialVisual(t){
-      const tileEl = t.el;
-      const gem = tileEl.firstChild;
-      if (!gem) return;
+    function assignSpecial(tile, type){ tile.type = type; if (type === T_RAINBOW) tile.color = null; setSpecialVisual(tile); }
 
-      // Remove emitter for previous state
-      Engine.removeEmitter(t);
-
-      // Reset base gem
-      if (t.color == null) {
-        gem.className = 'gem';
-      } else {
-        gem.className = `gem c-${t.color}`;
-      }
-      gem.innerHTML = '';
-
-      // Apply type-specific visuals + emitters
-      if (t.type === T_BOMB){
-        // simple glow (color remains) + fire emitter
-        Engine.addEmitter(t, T_BOMB);
-      } else if (t.type === T_STAR){
-        gem.classList.add('star');
-        Engine.addEmitter(t, T_STAR);
-      } else if (t.type === T_SUPERNOVA){
-        gem.classList.add('supernova');
-        Engine.addEmitter(t, T_SUPERNOVA);
-      } else if (t.type === T_RAINBOW) {
-        gem.className = 'gem rainbow';
-        createCubeMesh(gem);
-        Engine.addEmitter(t, T_RAINBOW);
-      }
-    }
-
-    function assignSpecial(tile,type){
-      tile.type=type;
-      if(type===T_RAINBOW) tile.color=null;
-      setSpecialVisual(tile);
-    }
-
-    function attachDragHandlers(t){
-      let start = null, moved = false;
-      const onDown = (e) => {
-        if (t.isClearing) return;
-        e.preventDefault();
-        start = { x: e.clientX || e.touches?.[0]?.clientX, y: e.clientY || e.touches?.[0]?.clientY };
-        t.el.classList.add('dragging');
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-        document.addEventListener('touchmove', onMove, { passive: false });
-        document.addEventListener('touchend', onUp);
+    // Improved pointer-based drag (single API for mouse/touch)
+    function attachDragHandlers(t){ let start=null, moved=false; let pointerId=null;
+      const onDown = (e)=>{
+        if (gameLocked) return; // block input when no moves
+        if (t.isClearing) return; e.preventDefault(); start = { x: e.clientX, y: e.clientY }; moved = false; t.el.classList.add('dragging'); pointerId = e.pointerId; window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onUp);
       };
-      const onMove = (e) => {
-        if (!start) return;
-        const x = e.clientX || e.touches?.[0]?.clientX;
-        const y = e.clientY || e.touches?.[0]?.clientY;
-        const dx = x - start.x, dy = y - start.y;
-        if (!moved && Math.max(Math.abs(dx), Math.abs(dy)) > 18) {
-          moved = true;
-          let dr = 0, dc = 0;
-          if (Math.abs(dx) > Math.abs(dy)) dc = dx > 0 ? 1 : -1; else dr = dy > 0 ? 1 : -1;
-          const nr = t.row + dr, nc = t.col + dc;
-          if (inBounds(nr, nc)) {
-            start = null;
-            doPlayerSwap(t.row, t.col, nr, nc);
-          }
-        }
+      const onMove = (e)=>{
+        if (!start) return; const dx = e.clientX - start.x, dy = e.clientY - start.y; if (!moved && Math.max(Math.abs(dx), Math.abs(dy)) > 18){ moved = true; let dr = 0, dc = 0; if (Math.abs(dx) > Math.abs(dy)) dc = dx > 0 ? 1 : -1; else dr = dy > 0 ? 1 : -1; const nr = t.row + dr, nc = t.col + dc; if (inBounds(nr,nc)) { start = null; doPlayerSwap(t.row, t.col, nr, nc); } }
       };
-      const onUp = () => {
-        start = null; moved = false;
-        t.el.classList.remove('dragging');
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        document.removeEventListener('touchmove', onMove);
-        document.removeEventListener('touchend', onUp);
-      };
-      t.el.addEventListener('mousedown', onDown);
-      t.el.addEventListener('touchstart', onDown, { passive: false });
+      const onUp = ()=>{ start = null; moved = false; t.el.classList.remove('dragging'); window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onUp); };
+      t.el.addEventListener('pointerdown', onDown);
     }
 
-    function swapTiles(a, b){
-      const ar = a.row, ac = a.col;
-      a.row = b.row; a.col = b.col;
-      b.row = ar; b.col = ac;
-      board[a.row][a.col] = a;
-      board[b.row][b.col] = b;
-      a.el.classList.add('moving'); b.el.classList.add('moving');
-      styleTile(a); styleTile(b);
-      setTimeout(()=>{ if (a.el) a.el.classList.remove('moving'); if (b.el) b.el.classList.remove('moving'); }, 220);
+    function swapTiles(a,b){ const ar=a.row, ac=a.col; a.row=b.row; a.col=b.col; b.row=ar; b.col=ac; board[a.row][a.col]=a; board[b.row][b.col]=b; a.el.classList.add('moving'); b.el.classList.add('moving'); styleTile(a); styleTile(b);
+      const cleanup = (ev)=>{ if (ev.propertyName === 'transform') { ev.target.classList.remove('moving'); ev.target.removeEventListener('transitionend', cleanup); } };
+      a.el.addEventListener('transitionend', cleanup); b.el.addEventListener('transitionend', cleanup);
     }
 
-    function queueResolve(){
-      resolveQueued = true;
-      if (resolving) return;
-      resolving = true;
-      (async () => {
-        while (resolveQueued) {
-          resolveQueued = false;
-          await resolveBoard();
-        }
-        resolving = false;
-      })();
-    }
+    function queueResolve(){ resolveQueued = true; if (resolving) return; resolving = true; (async ()=>{ while(resolveQueued){ resolveQueued = false; await resolveBoard(); } resolving = false; })(); }
 
-    async function resolveBoard(){
-      while (true){
-        const matches = findMatches();
+    // faster bomb count (used rarely)
+    function countBombExplosion(bomb){ let destroyed = 0; const {row,col} = bomb; for (let dr=-1; dr<=1; dr++){ for (let dc=-1; dc<=1; dc++){ const rr=row+dr, cc=col+dc; if (inBounds(rr,cc)){ const t = board[rr][cc]; if (t && t.isClearing) destroyed++; } } } return destroyed; }
 
-        // check if there's any tile already marked for clearing
-        let anyMarked = false;
-        for (let r = 0; r < N; r++){
-          for (let c = 0; c < N; c++){
-            if (board[r][c] && board[r][c].isClearing) { anyMarked = true; break; }
-          }
-          if (anyMarked) break;
-        }
+    async function resolveBoard(){ let cascadeCount = 0; while (true){ const matches = findMatches(); let anyMarked = false; for (let r=0;r<N;r++){ for (let c=0;c<N;c++){ if (board[r][c] && board[r][c].isClearing){ anyMarked = true; break; } } if (anyMarked) break; }
+        if (matches.length === 0 && !anyMarked) break; cascadeCount++; const toClear = new Set();
 
-        if (matches.length === 0 && !anyMarked) break;
+        function calcMatchScore(m){ const len = m.tiles.length; const isLT = len >= 5 && new Set(m.tiles.map(t=>t.r)).size > 1 && new Set(m.tiles.map(t=>t.c)).size > 1; if (isLT) return base + base*2; if (len===3) return base; if (len===4) return base*2; if (len===5) return base*10; if (len>=6) return base * len * 3; return 0; }
 
-        const toClear = new Set();
-
-        // decide power-ups and which tiles to clear
-        for (const m of matches){
-          const specials = classifyMatch(m);
-
-          if (!(specials.length === 1 && specials[0] === T_NORMAL)) {
+        for (const m of matches){ score += calcMatchScore(m); const specials = classifyMatch(m);
+          if (!(specials.length === 1 && specials[0] === T_NORMAL)){
             let candidates = m.tiles.map(({r,c}) => board[r][c]).filter(Boolean);
-
             let chosen = null;
-            if (lastSwap){
-              for (const coord of m.tiles){
-                if ((coord.r===lastSwap.r1 && coord.c===lastSwap.c1) ||
-                    (coord.r===lastSwap.r2 && coord.c===lastSwap.c2)){
-                  chosen = board[coord.r][coord.c];
-                  break;
-                }
-              }
-            }
-            if (!chosen){
-              const mid = m.tiles[Math.floor(m.tiles.length/2)];
-              chosen = board[mid.r][mid.c];
-            }
-
+            if (lastSwap){ for (const coord of m.tiles){ if ((coord.r===lastSwap.r1 && coord.c===lastSwap.c1) || (coord.r===lastSwap.r2 && coord.c===lastSwap.c2)){ chosen = board[coord.r][coord.c]; break; } } }
+            if (!chosen){ const mid = m.tiles[Math.floor(m.tiles.length/2)]; chosen = board[mid.r][mid.c]; }
             candidates = candidates.filter(t => t !== chosen);
+            const ordered = specials.slice(); const starIdx = ordered.indexOf(T_STAR); if (starIdx > -1) { ordered.splice(starIdx, 1); ordered.unshift(T_STAR); }
 
-            const ordered = specials.slice();
-            const starIdx = ordered.indexOf(T_STAR);
-            if (starIdx > -1) { ordered.splice(starIdx, 1); ordered.unshift(T_STAR); }
-
-            function takeNearestToChosen(){
-              if (!chosen || candidates.length === 0) return null;
-              candidates.sort((a,b)=>{
-                const da = Math.abs(a.row - chosen.row) + Math.abs(a.col - chosen.col);
-                const db = Math.abs(b.row - chosen.row) + Math.abs(b.col - chosen.col);
-                return da - db;
-              });
-              return candidates.shift() || null;
-            }
+            function takeNearestToChosen(){ if (!chosen || candidates.length === 0) return null; candidates.sort((a,b)=> (Math.abs(a.row-chosen.row)+Math.abs(a.col-chosen.col)) - (Math.abs(b.row-chosen.row)+Math.abs(b.col-chosen.col))); return candidates.shift() || null; }
 
             const specialTargets = [];
-            ordered.forEach((sp, i) => {
-              const target = (i === 0) ? chosen : takeNearestToChosen();
-              if (!target) return;
-
-              if (target.type !== T_NORMAL) {
-                target.pendingType = sp;
-                clearTile(target);
-              } else {
-                if (sp === T_RAINBOW) {
-                  target.type = T_RAINBOW;
-                  target.color = null;
-                } else if (sp === T_SUPERNOVA) {
-                  target.type = T_SUPERNOVA;
-                  target.orientation = ordered.orientation || specials.orientation || 'hor';
-                } else {
-                  target.type = sp;
-                }
-                setSpecialVisual(target);
-              }
-              specialTargets.push(target);
-            });
+            ordered.forEach((sp, i)=>{ const target = (i===0) ? chosen : takeNearestToChosen(); if (!target) return; if (target.type !== T_NORMAL){ target.pendingType = sp; clearTile(target); } else { if (sp === T_RAINBOW) { target.type = T_RAINBOW; target.color = null; } else if (sp === T_SUPERNOVA) { target.type = T_SUPERNOVA; target.orientation = ordered.orientation || specials.orientation || 'hor'; } else { target.type = sp; } setSpecialVisual(target); } specialTargets.push(target); });
 
             const keepSet = new Set(specialTargets);
-            for (const {r,c} of m.tiles){
-              const t = board[r][c];
-              if (t && !keepSet.has(t)) {
-                toClear.add(r*N + c);
-              }
-            }
+            for (const {r,c} of m.tiles){ const t = board[r][c]; if (t && !keepSet.has(t)) toClear.add(r*N + c); }
             continue;
           }
-
-          // normal: clear all tiles in the match
-          for (const coord of m.tiles) toClear.add(coord.r*N+coord.c);
+          for (const coord of m.tiles) toClear.add(coord.r*N + coord.c);
         }
 
-        // Include already marked
-        for (let r = 0; r < N; r++){
-          for (let c = 0; c < N; c++){
-            const t = board[r][c];
-            if (t && t.isClearing) toClear.add(r*N + c);
-          }
-        }
+        // include already marked
+        for (let r=0;r<N;r++) for (let c=0;c<N;c++){ const t = board[r][c]; if (t && t.isClearing) toClear.add(r*N + c); }
 
-        // Call clearTile on each
-        for (const key of toClear){
-          const r = Math.floor(key/N), c = key%N;
-          const cur = board[r][c];
-          if (cur) clearTile(cur);
-        }
+        for (const key of toClear){ const r = Math.floor(key/N), c = key % N; const cur = board[r][c]; if (cur) clearTile(cur); }
 
-        await wait(250);
-
-        // Remove cleared tiles OR transform into pending specials
-        for (let r = 0; r < N; r++){
-          for (let c = 0; c < N; c++){
-            const cur = board[r][c];
-            if (cur && cur.isClearing){
-              if (cur.pendingType) {
-                cur.isClearing = false;
-                cur.type = cur.pendingType;
-                cur.pendingType = null;
-                cur.el.style.opacity = 1;
-                setSpecialVisual(cur);
-              } else {
-                // burst particles at tile center before removal
-                const cx = c * SIZE + SIZE/2;
-                const cy = r * SIZE + SIZE/2;
-                Engine.burstAt(cx, cy, gemHues[cur.color ?? 0], 24, 160);
-
-                cur.el.remove();
-                Engine.removeEmitter(cur);
-                board[r][c] = null;
-                score += 10;
-              }
-            }
-          }
-        }
-
-        setHUD();
-        await collapseAndRefill();
         await wait(120);
-      }
+
+        const clearingNow = []; let hasSpecial = false;
+        for (let r=0;r<N;r++) for (let c=0;c<N;c++){ const t = board[r][c]; if (t && t.isClearing){ clearingNow.push(r*N + c); if ([T_BOMB, T_STAR, T_SUPERNOVA, T_RAINBOW].includes(t.type)) hasSpecial = true; } }
+
+        if (hasSpecial) score += clearingNow.length * base;
+
+        for (let r=0;r<N;r++){ for (let c=0;c<N;c++){ const cur = board[r][c]; if (cur && cur.isClearing){ if (cur.pendingType){ cur.isClearing = false; cur.type = cur.pendingType; cur.pendingType = null; cur.el.style.opacity = 1; setSpecialVisual(cur); } else { const cx = c * SIZE + SIZE/2, cy = r * SIZE + SIZE/2; Engine.burstAt(cx, cy, gemHues[cur.color ?? 0], 24, 160); cur.el.remove(); Engine.removeEmitter(cur); board[r][c] = null; } } } }
+
+        score += base * (cascadeCount - 1);
+        if (score >= targetScore) levelUp(); setHUD(); await collapseAndRefill(); await wait(120);
+    }
     }
 
-    function clearTile(t, forceColor=null){
-      if (!t) return;
-      if (t.isClearing) return;
-      t.isClearing = true;
-      t.el.style.opacity = 0.2;
-
-      // Burst now for special clears as feedback
-      const cx = t.col * SIZE + SIZE/2;
-      const cy = t.row * SIZE + SIZE/2;
-
-      if (t.type === T_BOMB){
-        Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 36, 200);
-        for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) {
-          const nr = t.row + dr, nc = t.col + dc;
-          if (inBounds(nr,nc) && board[nr][nc]) clearTile(board[nr][nc]);
-        }
-      }
-      else if (t.type === T_STAR){
-        Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 40, 240);
-        for (let i=0;i<N;i++){
-          if (board[t.row][i]) clearTile(board[t.row][i]);
-          if (board[i][t.col]) clearTile(board[i][t.col]);
-        }
-      }
-      else if (t.type === T_SUPERNOVA){
-        Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 80, 320);
-        const r0 = t.row, c0 = t.col;
-        for (let r=0; r<N; r++){
-          for (let dc=-1; dc<=1; dc++){
-            const cc = c0+dc;
-            if (inBounds(r,cc) && board[r][cc]) clearTile(board[r][cc]);
-          }
-        }
-        for (let c=0; c<N; c++){
-          for (let dr=-1; dr<=1; dr++){
-            const rr = r0+dr;
-            if (inBounds(rr,c) && board[rr][c]) clearTile(board[rr][c]);
-          }
-        }
-      }
-      else if (t.type === T_RAINBOW){
-        Object.values(gemHues).forEach(hue => {
-          Engine.burstAt(cx, cy, hue, 15, 200); // smaller bursts per color
-        });
-        let targetColor = forceColor;
-        if (targetColor == null) {
-          const colorsOnBoard = [];
-          for (let r=0;r<N;r++) for (let c=0;c<N;c++){
-            if (board[r][c] && board[r][c].color != null) colorsOnBoard.push(board[r][c].color);
-          }
-          if (colorsOnBoard.length > 0) {
-            targetColor = colorsOnBoard[Math.floor(Math.random()*colorsOnBoard.length)];
-          }
-        }
-        if (targetColor != null){
-          for (let r=0;r<N;r++) for (let c=0;c<N;c++){
-            if (board[r][c] && board[r][c].color === targetColor){
-              clearTile(board[r][c]);
-            }
-          }
-        }
-      }
+    function clearTile(t, forceColor = null){ if (!t || t.isClearing) return; t.isClearing = true; t.el.style.opacity = 0.2; const cx = t.col * SIZE + SIZE/2, cy = t.row * SIZE + SIZE/2;
+      if (t.type === T_BOMB){ Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 36, 200); for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++){ const nr = t.row + dr, nc = t.col + dc; if (inBounds(nr,nc) && board[nr][nc]) clearTile(board[nr][nc]); } }
+      else if (t.type === T_STAR){ Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 40, 240); for (let i=0;i<N;i++){ if (board[t.row][i]) clearTile(board[t.row][i]); if (board[i][t.col]) clearTile(board[i][t.col]); } }
+      else if (t.type === T_SUPERNOVA){ Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 80, 320); const r0 = t.row, c0 = t.col; for (let r=0;r<N;r++){ for (let dc=-1; dc<=1; dc++){ const cc = c0 + dc; if (inBounds(r,cc) && board[r][cc]) clearTile(board[r][cc]); } } for (let c=0;c<N;c++){ for (let dr=-1; dr<=1; dr++){ const rr = r0 + dr; if (inBounds(rr,c) && board[rr][c]) clearTile(board[rr][c]); } } }
+      else if (t.type === T_RAINBOW){ Object.values(gemHues).forEach(hue => Engine.burstAt(cx, cy, hue, 15, 200)); let targetColor = forceColor; if (targetColor == null){ const colorsOnBoard = []; for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (board[r][c] && board[r][c].color != null) colorsOnBoard.push(board[r][c].color); if (colorsOnBoard.length) targetColor = colorsOnBoard[Math.floor(Math.random()*colorsOnBoard.length)]; }
+        if (targetColor != null){ for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (board[r][c] && board[r][c].color === targetColor) clearTile(board[r][c]); } }
     }
 
-    async function doPlayerSwap(r1, c1, r2, c2){
-      const a = board[r1][c1], b = board[r2][c2];
-      if (!a || !b || a.isClearing || b.isClearing) return;
+    async function doPlayerSwap(r1,c1,r2,c2){ if (gameLocked) return; const a = board[r1][c1], b = board[r2][c2]; if (!a || !b || a.isClearing || b.isClearing) return; lastSwap = { r1, c1, r2, c2 }; swapTiles(a,b); await wait(180);
+      if (a.type === T_RAINBOW && b.type === T_RAINBOW){ for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (board[r][c]) clearTile(board[r][c]); setHUD(); queueResolve(); return; }
+      if (a.type === T_RAINBOW && b){ clearTile(a, b.color); setHUD(); queueResolve(); return; }
+      if (b.type === T_RAINBOW && a){ clearTile(b, a.color); setHUD(); queueResolve(); return; }
+      const matches = findMatches(); if (matches.length === 0){ swapTiles(a,b); await wait(180); return; }
+      setHUD(); queueResolve(); }
 
-      lastSwap = { r1, c1, r2, c2 };
-      swapTiles(a, b);
-      await wait(180);
-
-      // Rainbow + Rainbow: clear whole board
-      if (a.type === T_RAINBOW && b.type === T_RAINBOW) {
-        for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (board[r][c]) clearTile(board[r][c]);
-        moves++; setHUD(); queueResolve(); return;
-      }
-
-      if (a.type === T_RAINBOW && b) { clearTile(a, b.color); moves++; setHUD(); queueResolve(); return; }
-      if (b.type === T_RAINBOW && a) { clearTile(b, a.color); moves++; setHUD(); queueResolve(); return; }
-
-      const matches = findMatches();
-      if (matches.length === 0) { swapTiles(a, b); await wait(180); return; }
-
-      moves++; setHUD(); queueResolve();
+    function updateProgressBar(){
+      const from = levelStartScore || 0;
+      const to = (typeof targetScore === 'number' ? targetScore : 1);
+      let pct = 100;
+      if (to > from) pct = Math.max(0, Math.min(100, ((score - from) / (to - from)) * 100));
+      progressFill.style.width = `${pct}%`;
+      progressText.textContent = `${Math.round(pct)}% (${score} / ${targetScore})`;
+      // update ARIA for accessibility
+      const bar = progressFill.parentElement;
+      if (bar) bar.setAttribute('aria-valuenow', Math.round(pct));
     }
 
-    function setHUD(){ scoreEl.textContent = `Score: ${score}`; movesEl.textContent = `Moves: ${moves}`; }
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-
-    function findMatches() {
-      const raw = [];
-
-      // horizontal runs
-      for (let r = 0; r < N; r++) {
-        let run = 1;
-        for (let c = 1; c <= N; c++) {
-          const cur  = c < N ? board[r][c]   : null;
-          const prev = c-1 >= 0 ? board[r][c-1] : null;
-          const isSeq = cur && prev && cur.type !== T_RAINBOW && prev.type !== T_RAINBOW && cur.color === prev.color;
-          if (isSeq) run++;
-          else {
-            if (run >= 3) {
-              const tiles = [];
-              for (let k = c - run; k < c; k++) tiles.push({ r, c: k });
-              raw.push(tiles);
-            }
-            run = 1;
-          }
-        }
-      }
-
-      // vertical runs
-      for (let c = 0; c < N; c++) {
-        let run = 1;
-        for (let r = 1; r <= N; r++) {
-          const cur  = r < N ? board[r][c]   : null;
-          const prev = r-1 >= 0 ? board[r-1][c] : null;
-          const isSeq = cur && prev && cur.type !== T_RAINBOW && prev.type !== T_RAINBOW && cur.color === prev.color;
-          if (isSeq) run++;
-          else {
-            if (run >= 3) {
-              const tiles = [];
-              for (let k = r - run; k < r; k++) tiles.push({ r: k, c });
-              raw.push(tiles);
-            }
-            run = 1;
-          }
-        }
-      }
-
-      // merge overlapping runs into L/T shapes
-      const merged = [];
-      while (raw.length) {
-        let group = raw.pop();
-        let changed = true;
-        while (changed) {
-          changed = false;
-          for (let i = raw.length - 1; i >= 0; i--) {
-            if (raw[i].some(a => group.some(b => a.r === b.r && a.c === b.c))) {
-              group = group.concat(raw[i]);
-              raw.splice(i, 1);
-              changed = true;
-            }
-          }
-        }
-        const uniq = [];
-        const seen = new Set();
-        for (const t of group) {
-          const key = t.r + "," + t.c;
-          if (!seen.has(key)) { seen.add(key); uniq.push(t); }
-        }
-        merged.push({ tiles: uniq });
-      }
-
-      return merged;
+    function showNoMovesOverlay(){
+      noMovesOverlay.classList.add('active');
+      noMovesOverlay.setAttribute('aria-hidden', 'false');
+      gameLocked = true;
+      boardEl.classList.add('blurred');
     }
 
-    function classifyMatch(match){
-      const tiles = match.tiles;
-      const rowsMap = new Map();
-      const colsMap = new Map();
-
-      for (const {r,c} of tiles){
-        if (!rowsMap.has(r)) rowsMap.set(r, []);
-        rowsMap.get(r).push(c);
-        if (!colsMap.has(c)) colsMap.set(c, []);
-        colsMap.get(c).push(r);
-      }
-
-      const longestInSorted = (arr) => {
-        arr.sort((a,b)=>a-b);
-        let best = 1, cur = 1;
-        for (let i=1;i<arr.length;i++){
-          if (arr[i] === arr[i-1] + 1) cur++;
-          else if (arr[i] !== arr[i-1]) cur = 1;
-          best = Math.max(best, cur);
-        }
-        return best;
-      };
-
-      let maxH = 1, maxV = 1;
-      for (const cols of rowsMap.values()) maxH = Math.max(maxH, longestInSorted(cols.slice()));
-      for (const rows of colsMap.values()) maxV = Math.max(maxV, longestInSorted(rows.slice()));
-      const maxLine = Math.max(maxH, maxV);
-
-      const isLT = tiles.length >= 5 && rowsMap.size > 1 && colsMap.size > 1;
-
-      const specials = [];
-      if (maxLine >= 6) specials.push(T_SUPERNOVA);
-      else if (maxLine >= 5) specials.push(T_RAINBOW);
-      else if (maxLine === 4) specials.push(T_BOMB);
-      if (isLT) specials.push(T_STAR);
-
-      const orientation = (maxH >= maxV) ? 'hor' : 'ver';
-
-      const res = (specials.length ? specials : [T_NORMAL]);
-      res.orientation = orientation;
-      return res;
+    function hideNoMovesOverlay(){
+      noMovesOverlay.classList.remove('active');
+      noMovesOverlay.setAttribute('aria-hidden', 'true');
+      gameLocked = false;
+      boardEl.classList.remove('blurred');
     }
 
-    async function collapseAndRefill(){
-      for (let c = 0; c < N; c++){
-        let write = N-1;
-
-        for (let r = N-1; r>=0; r--){
+    // checks for any valid swaps that would produce a match (or involve rainbow)
+    function hasAnyValidMoves(){
+      // when resolving, skip check — board is mid-change
+      if (resolving) return true;
+      for (let r=0;r<N;r++){
+        for (let c=0;c<N;c++){
           const t = board[r][c];
-          if (t){
-            if (t.row !== write){
-              const oldRow = t.row;
-              t.row = write;
-              board[write][c] = t;
-              board[r][c] = null;
-
-              const distance = (write - oldRow) * SIZE;
-              const duration = 120 + distance * 0.5;
-
-              t.el.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
-              styleTile(t);
-              setTimeout(()=>{ if(t.el) t.el.style.transition = ''; }, duration+20);
-            }
-            write--;
+          if (!t) continue;
+          // only check right & down to avoid duplicates
+          const dirs = [[0,1],[1,0]];
+          for (const [dr,dc] of dirs){
+            const nr = r + dr, nc = c + dc;
+            if (!inBounds(nr,nc)) continue;
+            const u = board[nr][nc];
+            if (!u) continue;
+            // swapping with a rainbow is always a valid move
+            if (t.type === T_RAINBOW || u.type === T_RAINBOW) return true;
+            // do a quick swap in the board matrix and run match detection
+            board[r][c] = u; board[nr][nc] = t;
+            const matches = findMatches();
+            // swap back
+            board[r][c] = t; board[nr][nc] = u;
+            if (matches.length > 0) return true;
           }
         }
-
-        for (let r=write; r>=0; r--){
-          const t = makeTile(r,c,randInt(COLORS));
-          t.row=r; t.col=c;
-          board[r][c]=t;
-
-          const spawnRow = -1 - (write-r);
-          t.el.style.transform=`translate(${c*SIZE}px,${spawnRow*SIZE}px)`;
-
-          const distance = (r - spawnRow) * SIZE;
-          const duration = 120 + distance * 0.5;
-
-          requestAnimationFrame(()=>{
-            t.el.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
-            styleTile(t);
-          });
-          setTimeout(()=>{ if(t.el) t.el.style.transition = ''; }, duration+20);
-        }
       }
-      await wait(250);
-    }
-
-    function buildBoard(){
-      boardEl.querySelectorAll('.tile').forEach(n => n.remove());
-      // clear engine
-      Engine.particles.length = 0;
-      Engine.emitters.clear();
-
-      // draw grid
-      const existingBGs = boardEl.querySelectorAll('.cell-bg');
-      existingBGs.forEach(n=>n.remove());
-      for (let r=0;r<N;r++) for (let c=0;c<N;c++){
-        const bg=document.createElement('div');
-        bg.className='cell-bg';
-        bg.style.transform=`translate(${c*SIZE}px,${r*SIZE}px)`;
-        boardEl.appendChild(bg);
-      }
-
-      board = Array.from({length:N},(_,r)=>Array.from({length:N},(_,c)=>makeTile(r,c)));
-      for (let r=0;r<N;r++) for (let c=0;c<N;c++){
-        while (causesImmediateMatch(r,c)){
-          const cur=board[r][c]; cur.color=randInt(COLORS); cur.el.firstChild.className=`gem c-${cur.color}`;
-        }
-      }
-      score=0;moves=0;setHUD();
-      Engine.resize();
-    }
-
-    function causesImmediateMatch(r,c){
-      const cur=board[r][c]; if(!cur) return false; const color=cur.color;
-      if (c>=2 && board[r][c-1]&&board[r][c-2]&&board[r][c-1].color===color&&board[r][c-2].color===color) return true;
-      if (r>=2 && board[r-1][c]&&board[r-2][c]&&board[r-1][c].color===color&&board[r-2][c].color===color) return true;
       return false;
     }
 
-    document.getElementById('reset').addEventListener('click',()=>buildBoard());
+    function checkNoMovesAndHandle(){
+      // if we are mid-resolve or tiles are still clearing, skip check
+      if (resolving) return;
+      const any = hasAnyValidMoves();
+      if (!any) showNoMovesOverlay();
+      else hideNoMovesOverlay();
+    }
+
+    function setHUD(){ levelEl.textContent = `Level: ${level}`; updateProgressBar(); checkNoMovesAndHandle(); }
+
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+
+    function findMatches(){ const raw = [];
+      // horizontal
+      for (let r=0;r<N;r++){ let run=1; for (let c=1;c<=N;c++){ const cur = c < N ? board[r][c] : null; const prev = c-1 >=0 ? board[r][c-1] : null; const isSeq = cur && prev && cur.type !== T_RAINBOW && prev.type !== T_RAINBOW && cur.color === prev.color; if (isSeq) run++; else { if (run >= 3){ const tiles = []; for (let k = c-run; k < c; k++) tiles.push({ r, c: k }); raw.push(tiles); } run = 1; } } }
+      // vertical
+      for (let c=0;c<N;c++){ let run=1; for (let r=1;r<=N;r++){ const cur = r < N ? board[r][c] : null; const prev = r-1 >=0 ? board[r-1][c] : null; const isSeq = cur && prev && cur.type !== T_RAINBOW && prev.type !== T_RAINBOW && cur.color === prev.color; if (isSeq) run++; else { if (run >= 3){ const tiles = []; for (let k = r-run; k < r; k++) tiles.push({ r: k, c }); raw.push(tiles); } run = 1; } } }
+      // merge
+      const merged = [];
+      while (raw.length){ let group = raw.pop(); let changed = true; while (changed){ changed = false; for (let i = raw.length - 1; i >= 0; i--){ if (raw[i].some(a => group.some(b => a.r === b.r && a.c === b.c))){ group = group.concat(raw[i]); raw.splice(i,1); changed = true; } } }
+        const uniq = []; const seen = new Set(); for (const t of group){ const key = t.r + ',' + t.c; if (!seen.has(key)){ seen.add(key); uniq.push(t); } } merged.push({ tiles: uniq }); }
+      return merged; }
+
+    function classifyMatch(match){ const tiles = match.tiles; const rowsMap = new Map(); const colsMap = new Map(); for (const {r,c} of tiles){ if (!rowsMap.has(r)) rowsMap.set(r, []); rowsMap.get(r).push(c); if (!colsMap.has(c)) colsMap.set(c, []); colsMap.get(c).push(r); }
+      const longestInSorted = (arr) => { arr.sort((a,b)=>a-b); let best = 1, cur = 1; for (let i=1;i<arr.length;i++){ if (arr[i] === arr[i-1] + 1) cur++; else if (arr[i] !== arr[i-1]) cur = 1; best = Math.max(best, cur); } return best; };
+      let maxH = 1, maxV = 1; for (const cols of rowsMap.values()) maxH = Math.max(maxH, longestInSorted(cols.slice())); for (const rows of colsMap.values()) maxV = Math.max(maxV, longestInSorted(rows.slice())); const maxLine = Math.max(maxH, maxV); const isLT = tiles.length >= 5 && rowsMap.size > 1 && colsMap.size > 1; const specials = []; if (maxLine >= 6) specials.push(T_SUPERNOVA); else if (maxLine >= 5) specials.push(T_RAINBOW); else if (maxLine === 4) specials.push(T_BOMB); if (isLT) specials.push(T_STAR); const orientation = (maxH >= maxV) ? 'hor' : 'ver'; const res = (specials.length ? specials : [T_NORMAL]); res.orientation = orientation; return res; }
+
+    async function collapseAndRefill(){
+  for (let c = 0; c < N; c++){
+    let write = N - 1;
+
+    // move existing tiles down
+    for (let r = N - 1; r >= 0; r--){
+      const t = board[r][c];
+      if (!t) continue;
+
+      if (t.row !== write){
+        const oldRow = t.row;
+
+        // if something already occupies the target cell (rare), clear it first
+        const occupying = board[write][c];
+        if (occupying && occupying !== t){
+          // mark it for clearing and remove from board so we can place t
+          clearTile(occupying);
+          board[write][c] = null;
+        }
+
+        // move tile logically
+        t.row = write;
+        board[write][c] = t;
+        board[r][c] = null;
+
+        // ensure visual stacking above other tiles while falling
+        t.el.classList.add('falling');
+
+        const distance = (write - oldRow) * SIZE;
+        const duration = 120 + distance * 0.5;
+        t.el.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
+        styleTile(t);
+
+        // cleanup after animation
+        t.el.addEventListener('transitionend', function cb(ev){
+          if (ev.propertyName === 'transform'){
+            t.el.style.transition = '';
+            t.el.classList.remove('falling');
+            t.el.removeEventListener('transitionend', cb);
+          }
+        });
+      }
+      write--;
+    }
+
+    // spawn new tiles above and drop them in
+    for (let r = write; r >= 0; r--){
+      // if somehow a tile exists here already, clear it first
+      if (board[r][c]){
+        clearTile(board[r][c]);
+        board[r][c] = null;
+      }
+
+      const t = makeTile(r, c, randInt(COLORS));
+      t.row = r;
+      t.col = c;
+      board[r][c] = t;
+
+      // position start above the board
+      const spawnRow = -1 - (write - r);
+      t.el.style.transform = `translate3d(${c*SIZE}px,${spawnRow*SIZE}px,0)`;
+
+      // ensure spawned tile appears on top while dropping
+      t.el.classList.add('falling');
+
+      const distance = (r - spawnRow) * SIZE;
+      const duration = 120 + distance * 0.5;
+
+      requestAnimationFrame(()=>{
+        t.el.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
+        styleTile(t);
+        t.el.addEventListener('transitionend', function cb(){
+          t.el.style.transition = '';
+          t.el.classList.remove('falling');
+          t.el.removeEventListener('transitionend', cb);
+        });
+      });
+    }
+  }
+
+  await wait(250);
+  // after refill, check for no moves
+  checkNoMovesAndHandle();
+}
+
+
+    function levelUp(){ level++; targetScore += Math.round(2000 * Math.pow(level, 2)); base += 50; // new higher target
+      levelStartScore = score; // start progress at current score for the new target
+      const cx = (N * SIZE) / 2, cy = (N * SIZE) / 2; Engine.burstAt(cx, cy, 'gold', 80, 300); const popup = document.createElement('div'); popup.textContent = `LEVEL ${level}!`; popup.style.position = 'absolute'; popup.style.top = '50%'; popup.style.left = '50%'; popup.style.zIndex = '10'; popup.style.transform = 'translate(-50%, -50%)'; popup.style.fontSize = '64px'; popup.style.fontWeight = 'bold'; popup.style.color = 'gold'; popup.style.textShadow = '0 0 15px black, 0 0 30px orange'; popup.style.pointerEvents = 'none'; popup.style.opacity = '0'; popup.style.transition = 'opacity 0.5s ease'; document.body.appendChild(popup); setTimeout(()=>popup.style.opacity = '1', 50); setTimeout(()=>{ popup.style.opacity = '0'; setTimeout(()=>popup.remove(),500); }, 2000); shuffleBoard(); setHUD(); }
+
+    function shuffleBoard(){ const gems = []; for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (board[r][c]) gems.push(board[r][c]); for (let i=gems.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [gems[i], gems[j]] = [gems[j], gems[i]]; }
+      let idx = 0; for (let r=0;r<N;r++) for (let c=0;c<N;c++){ const t = gems[idx++]; board[r][c] = t; if (t){ t.row = r; t.col = c; t.el.style.transform = `translate3d(${c*SIZE}px, ${r*SIZE}px, 0)`; } }
+      // after shuffle, check for no moves
+      checkNoMovesAndHandle();
+    }
+
+    function buildBoard(){ // cleanup
+      boardEl.querySelectorAll('.tile').forEach(n => n.remove()); Engine.particles.length = 0; Engine.emitters.clear();
+      // backgrounds
+      boardEl.querySelectorAll('.cell-bg').forEach(n => n.remove()); const fragBg = document.createDocumentFragment(); for (let r=0;r<N;r++) for (let c=0;c<N;c++){ const bg = document.createElement('div'); bg.className='cell-bg'; bg.style.transform = `translate3d(${c*SIZE}px,${r*SIZE}px,0)`; fragBg.appendChild(bg); } boardEl.appendChild(fragBg);
+      // tiles (batched)
+      const frag = document.createDocumentFragment(); board = Array.from({length:N},(_,r)=>Array(N)); for (let r=0;r<N;r++){ for (let c=0;c<N;c++){ const t = makeTile(r,c,randInt(COLORS), frag); board[r][c] = t; } }
+      boardEl.appendChild(frag);
+      // avoid immediate matches
+      for (let r=0;r<N;r++) for (let c=0;c<N;c++){ while (causesImmediateMatch(r,c)){ const cur = board[r][c]; cur.color = randInt(COLORS); const gem = cur.el.firstChild; if (gem) gem.className = `gem c-${cur.color}`; } }
+      // reset progression state
+      score = 0; level = 1; targetScore = 2000; base = 50; levelStartScore = score;
+      // ensure overlay hidden and interactions allowed
+      hideNoMovesOverlay();
+      setHUD(); Engine.resize(); }
+
+    function causesImmediateMatch(r,c){ const cur = board[r][c]; if (!cur) return false; const color = cur.color; if (c>=2 && board[r][c-1] && board[r][c-2] && board[r][c-1].color === color && board[r][c-2].color === color) return true; if (r>=2 && board[r-1][c] && board[r-2][c] && board[r-1][c].color === color && board[r-2][c].color === color) return true; return false; }
+
+    resetBtn.addEventListener('click', () => buildBoard());
+    overlayResetBtn.addEventListener('click', () => buildBoard());
     buildBoard();
   </script>
 </body>
