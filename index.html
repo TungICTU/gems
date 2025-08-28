@@ -251,26 +251,50 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
 
         function calcMatchScore(m){ const len = m.tiles.length; const isLT = len >= 5 && new Set(m.tiles.map(t=>t.r)).size > 1 && new Set(m.tiles.map(t=>t.c)).size > 1; if (isLT) return base + base*2; if (len===3) return base; if (len===4) return base*2; if (len===5) return base*10; if (len>=6) return base * len * 3; return 0; }
 
-        for (const m of matches){ score += calcMatchScore(m); const specials = classifyMatch(m);
-          if (!(specials.length === 1 && specials[0] === T_NORMAL)){
-            let candidates = m.tiles.map(({r,c}) => board[r][c]).filter(Boolean);
-            let chosen = null;
-            if (lastSwap){ for (const coord of m.tiles){ if ((coord.r===lastSwap.r1 && coord.c===lastSwap.c1) || (coord.r===lastSwap.r2 && coord.c===lastSwap.c2)){ chosen = board[coord.r][coord.c]; break; } } }
-            if (!chosen){ const mid = m.tiles[Math.floor(m.tiles.length/2)]; chosen = board[mid.r][mid.c]; }
-            candidates = candidates.filter(t => t !== chosen);
-            const ordered = specials.slice(); const starIdx = ordered.indexOf(T_STAR); if (starIdx > -1) { ordered.splice(starIdx, 1); ordered.unshift(T_STAR); }
+        for (const m of matches){
+  // score for this match now accounts for the cascade multiplier
+  // (cascadeCount is 1 for the first wave, 2 for the first cascade, etc.)
+  const baseMatch = calcMatchScore(m);
+  const gained = baseMatch * cascadeCount; // <-- cascade multiplier applied here
+  score += gained;
 
-            function takeNearestToChosen(){ if (!chosen || candidates.length === 0) return null; candidates.sort((a,b)=> (Math.abs(a.row-chosen.row)+Math.abs(a.col-chosen.col)) - (Math.abs(b.row-chosen.row)+Math.abs(b.col-chosen.col))); return candidates.shift() || null; }
+  // POPUP for this match (colored), shows the full gained value (including cascade)
+  if (m.tiles.length && gained > 0){
+    let sumX = 0, sumY = 0;
+    for (const {r,c} of m.tiles){
+      sumX += c * SIZE + SIZE/2;
+      sumY += r * SIZE + SIZE/2;
+    }
+    const avgX = sumX / m.tiles.length;
+    const avgY = sumY / m.tiles.length;
+    const rect = boardEl.getBoundingClientRect();
+    showScorePopup(gained, rect.left + avgX, rect.top + avgY, colorForMatch(m));
+  }
 
-            const specialTargets = [];
-            ordered.forEach((sp, i)=>{ const target = (i===0) ? chosen : takeNearestToChosen(); if (!target) return; if (target.type !== T_NORMAL){ target.pendingType = sp; clearTile(target); } else { if (sp === T_RAINBOW) { target.type = T_RAINBOW; target.color = null; } else if (sp === T_SUPERNOVA) { target.type = T_SUPERNOVA; target.orientation = ordered.orientation || specials.orientation || 'hor'; } else { target.type = sp; } setSpecialVisual(target); } specialTargets.push(target); });
+  const specials = classifyMatch(m);
+  // existing special creation logic remains unchanged (turn certain tiles into specials,
+  // keep or clear other tiles). That part of your code should follow here as before:
+  if (!(specials.length === 1 && specials[0] === T_NORMAL)){
+    let candidates = m.tiles.map(({r,c}) => board[r][c]).filter(Boolean);
+    let chosen = null;
+    if (lastSwap){ for (const coord of m.tiles){ if ((coord.r===lastSwap.r1 && coord.c===lastSwap.c1) || (coord.r===lastSwap.r2 && coord.c===lastSwap.c2)){ chosen = board[coord.r][coord.c]; break; } } }
+    if (!chosen){ const mid = m.tiles[Math.floor(m.tiles.length/2)]; chosen = board[mid.r][mid.c]; }
+    candidates = candidates.filter(t => t !== chosen);
+    const ordered = specials.slice(); const starIdx = ordered.indexOf(T_STAR); if (starIdx > -1) { ordered.splice(starIdx, 1); ordered.unshift(T_STAR); }
 
-            const keepSet = new Set(specialTargets);
-            for (const {r,c} of m.tiles){ const t = board[r][c]; if (t && !keepSet.has(t)) toClear.add(r*N + c); }
-            continue;
-          }
-          for (const coord of m.tiles) toClear.add(coord.r*N + coord.c);
-        }
+    function takeNearestToChosen(){ if (!chosen || candidates.length === 0) return null; candidates.sort((a,b)=> (Math.abs(a.row-chosen.row)+Math.abs(a.col-chosen.col)) - (Math.abs(b.row-chosen.row)+Math.abs(b.col-chosen.col))); return candidates.shift() || null; }
+
+    const specialTargets = [];
+    ordered.forEach((sp, i)=>{ const target = (i===0) ? chosen : takeNearestToChosen(); if (!target) return; if (target.type !== T_NORMAL){ target.pendingType = sp; clearTile(target); } else { if (sp === T_RAINBOW) { target.type = T_RAINBOW; target.color = null; } else if (sp === T_SUPERNOVA) { target.type = T_SUPERNOVA; target.orientation = ordered.orientation || specials.orientation || 'hor'; } else { target.type = sp; } setSpecialVisual(target); } specialTargets.push(target); });
+
+    const keepSet = new Set(specialTargets);
+    for (const {r,c} of m.tiles){ const t = board[r][c]; if (t && !keepSet.has(t)) toClear.add(r*N + c); }
+    continue;
+  }
+
+  for (const coord of m.tiles) toClear.add(coord.r*N + coord.c);
+}
+
 
         // include already marked
         for (let r=0;r<N;r++) for (let c=0;c<N;c++){ const t = board[r][c]; if (t && t.isClearing) toClear.add(r*N + c); }
@@ -279,25 +303,155 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
 
         await wait(120);
 
-        const clearingNow = []; let hasSpecial = false;
-        for (let r=0;r<N;r++) for (let c=0;c<N;c++){ const t = board[r][c]; if (t && t.isClearing){ clearingNow.push(r*N + c); if ([T_BOMB, T_STAR, T_SUPERNOVA, T_RAINBOW].includes(t.type)) hasSpecial = true; } }
+        const clearingNow = [];
+let hasSpecial = false;
+for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+  const t = board[r][c];
+  if (t && t.isClearing){
+    clearingNow.push({r,c,t});
+    if ([T_BOMB, T_STAR, T_SUPERNOVA, T_RAINBOW].includes(t.type)) hasSpecial = true;
+  }
+}
 
-        if (hasSpecial) score += clearingNow.length * base;
+if (hasSpecial){
+  const specialBonus = clearingNow.length * base;
+  if (specialBonus > 0){
+    score += specialBonus;
+    // Popup near the average position of special tiles, or center if none
+    const rect = boardEl.getBoundingClientRect();
+    let sx = 0, sy = 0, n = 0;
+    for (const {r,c,t} of clearingNow){
+      if ([T_BOMB, T_STAR, T_SUPERNOVA, T_RAINBOW].includes(t.type)){
+        sx += c * SIZE + SIZE/2;
+        sy += r * SIZE + SIZE/2;
+        n++;
+      }
+    }
+    const px = n ? (sx/n) : (N*SIZE/2);
+    const py = n ? (sy/n) : (N*SIZE/2);
+    showScorePopup(specialBonus, rect.left + px, rect.top + py, 'gold');
+  }
+}
+
 
         for (let r=0;r<N;r++){ for (let c=0;c<N;c++){ const cur = board[r][c]; if (cur && cur.isClearing){ if (cur.pendingType){ cur.isClearing = false; cur.type = cur.pendingType; cur.pendingType = null; cur.el.style.opacity = 1; setSpecialVisual(cur); } else { const cx = c * SIZE + SIZE/2, cy = r * SIZE + SIZE/2; Engine.burstAt(cx, cy, gemHues[cur.color ?? 0], 24, 160); cur.el.remove(); Engine.removeEmitter(cur); board[r][c] = null; } } } }
 
-        score += base * (cascadeCount - 1);
+        const cBonus = base * (cascadeCount - 1);
+if (cBonus > 0){
+  score += cBonus;
+  const rect = boardEl.getBoundingClientRect();
+  // show near the top-center of the board
+  showScorePopup(cBonus, rect.left + (N*SIZE)/2, rect.top + 24, '#66ff94', `Cascade x${cascadeCount}`);
+}
+
         if (score >= targetScore) levelUp(); setHUD(); await collapseAndRefill(); await wait(120);
     }
     }
 
-    function clearTile(t, forceColor = null){ if (!t || t.isClearing) return; t.isClearing = true; t.el.style.opacity = 0.2; const cx = t.col * SIZE + SIZE/2, cy = t.row * SIZE + SIZE/2;
-      if (t.type === T_BOMB){ Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 36, 200); for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++){ const nr = t.row + dr, nc = t.col + dc; if (inBounds(nr,nc) && board[nr][nc]) clearTile(board[nr][nc]); } }
-      else if (t.type === T_STAR){ Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 40, 240); for (let i=0;i<N;i++){ if (board[t.row][i]) clearTile(board[t.row][i]); if (board[i][t.col]) clearTile(board[i][t.col]); } }
-      else if (t.type === T_SUPERNOVA){ Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 80, 320); const r0 = t.row, c0 = t.col; for (let r=0;r<N;r++){ for (let dc=-1; dc<=1; dc++){ const cc = c0 + dc; if (inBounds(r,cc) && board[r][cc]) clearTile(board[r][cc]); } } for (let c=0;c<N;c++){ for (let dr=-1; dr<=1; dr++){ const rr = r0 + dr; if (inBounds(rr,c) && board[rr][c]) clearTile(board[rr][c]); } } }
-      else if (t.type === T_RAINBOW){ Object.values(gemHues).forEach(hue => Engine.burstAt(cx, cy, hue, 15, 200)); let targetColor = forceColor; if (targetColor == null){ const colorsOnBoard = []; for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (board[r][c] && board[r][c].color != null) colorsOnBoard.push(board[r][c].color); if (colorsOnBoard.length) targetColor = colorsOnBoard[Math.floor(Math.random()*colorsOnBoard.length)]; }
-        if (targetColor != null){ for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (board[r][c] && board[r][c].color === targetColor) clearTile(board[r][c]); } }
+    function clearTile(t, forceColor = null){
+  if (!t || t.isClearing) return;
+  t.isClearing = true;
+  t.el.style.opacity = 0.2;
+  const cx = t.col * SIZE + SIZE/2, cy = t.row * SIZE + SIZE/2;
+
+  if (t.type === T_BOMB){
+    Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 36, 200);
+    for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++){
+      const nr = t.row + dr, nc = t.col + dc;
+      if (inBounds(nr,nc) && board[nr][nc]) clearTile(board[nr][nc]);
     }
+    return;
+  }
+  else if (t.type === T_STAR){
+    Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 40, 240);
+    for (let i=0;i<N;i++){
+      if (board[t.row][i]) clearTile(board[t.row][i]);
+      if (board[i][t.col]) clearTile(board[i][t.col]);
+    }
+    return;
+  }
+  else if (t.type === T_SUPERNOVA){
+    Engine.burstAt(cx, cy, gemHues[t.color ?? 0], 80, 320);
+    const r0 = t.row, c0 = t.col;
+    for (let r=0;r<N;r++){
+      for (let dc=-1; dc<=1; dc++){
+        const cc = c0 + dc;
+        if (inBounds(r,cc) && board[r][cc]) clearTile(board[r][cc]);
+      }
+    }
+    for (let c=0;c<N;c++){
+      for (let dr=-1; dr<=1; dr++){
+        const rr = r0 + dr;
+        if (inBounds(rr,c) && board[rr][c]) clearTile(board[rr][c]);
+      }
+    }
+    return;
+  }
+    else if (t.type === T_RAINBOW){
+    // rainbow: mark targets as clearing (or trigger special clears) so resolveBoard
+    // will handle removal + collapse/refill in a single correct place.
+    Object.values(gemHues).forEach(hue => Engine.burstAt(cx, cy, hue, 15, 200));
+
+    let targetColor = forceColor;
+    if (targetColor == null){
+      const colorsOnBoard = [];
+      for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (board[r][c] && board[r][c].color != null) colorsOnBoard.push(board[r][c].color);
+      if (colorsOnBoard.length) targetColor = colorsOnBoard[Math.floor(Math.random()*colorsOnBoard.length)];
+    }
+
+    if (targetColor != null){
+      const rect = boardEl.getBoundingClientRect();
+      const targets = [];
+      for (let r=0;r<N;r++){
+        for (let c=0;c<N;c++){
+          const t2 = board[r][c];
+          if (t2 && t2.color === targetColor){
+            targets.push({r,c,t: t2});
+          }
+        }
+      }
+
+      for (const {r,c,t:victim} of targets){
+        // immediate visible feedback & scoring per gem
+        const px = rect.left + (c * SIZE + SIZE/2);
+        const py = rect.top + (r * SIZE + SIZE/2);
+        const colHue = gemHues[victim.color ?? 0];
+        showScorePopup(base, px, py, `hsl(${colHue}, 100%, 60%)`);
+        score += base;
+        Engine.burstAt(c * SIZE + SIZE/2, r * SIZE + SIZE/2, gemHues[victim.color ?? 0], 8, 120);
+
+        // If the victim is a special, trigger its clear logic so it detonates correctly.
+        if ([T_BOMB, T_STAR, T_SUPERNOVA, T_RAINBOW].includes(victim.type)){
+          // clearTile will set isClearing / trigger chain reactions
+          clearTile(victim);
+        } else {
+          // otherwise mark it for the normal clearing that resolveBoard will finalize
+          if (!victim.isClearing){
+            victim.isClearing = true;
+            victim.el.style.opacity = 0.2;
+          }
+        }
+      }
+
+      // mark the rainbow itself to be cleared by the resolver (do not remove it here)
+      if (!t.isClearing){
+        t.isClearing = true;
+        t.el.style.opacity = 0.2;
+      }
+
+      setHUD();
+    }
+    return;
+  }
+
+
+  // default normal tile (no special)
+  if (t.type === T_NORMAL || t.type == null){
+    // nothing extra — we'll finalize removal in resolveBoard's cleanup loop
+    return;
+  }
+}
+
 
     async function doPlayerSwap(r1,c1,r2,c2){ if (gameLocked) return; const a = board[r1][c1], b = board[r2][c2]; if (!a || !b || a.isClearing || b.isClearing) return; lastSwap = { r1, c1, r2, c2 }; swapTiles(a,b); await wait(180);
       if (a.type === T_RAINBOW && b.type === T_RAINBOW){ for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (board[r][c]) clearTile(board[r][c]); setHUD(); queueResolve(); return; }
@@ -400,28 +554,26 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
       if (t.row !== write){
         const oldRow = t.row;
 
-        // if something already occupies the target cell (rare), clear it first
-        const occupying = board[write][c];
-        if (occupying && occupying !== t){
-          // mark it for clearing and remove from board so we can place t
-          clearTile(occupying);
+        // clear old slot first
+        board[r][c] = null;
+
+        // if destination occupied, remove it
+        if (board[write][c] && board[write][c] !== t){
+          board[write][c].el.remove();
           board[write][c] = null;
         }
 
-        // move tile logically
+        // reassign tile
         t.row = write;
         board[write][c] = t;
-        board[r][c] = null;
 
-        // ensure visual stacking above other tiles while falling
+        // animate fall
         t.el.classList.add('falling');
-
         const distance = (write - oldRow) * SIZE;
         const duration = 120 + distance * 0.5;
         t.el.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
         styleTile(t);
 
-        // cleanup after animation
         t.el.addEventListener('transitionend', function cb(ev){
           if (ev.propertyName === 'transform'){
             t.el.style.transition = '';
@@ -430,14 +582,15 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
           }
         });
       }
+
       write--;
     }
 
     // spawn new tiles above and drop them in
     for (let r = write; r >= 0; r--){
-      // if somehow a tile exists here already, clear it first
+      // make absolutely sure cell is empty
       if (board[r][c]){
-        clearTile(board[r][c]);
+        board[r][c].el.remove();
         board[r][c] = null;
       }
 
@@ -446,11 +599,9 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
       t.col = c;
       board[r][c] = t;
 
-      // position start above the board
+      // spawn above the board
       const spawnRow = -1 - (write - r);
       t.el.style.transform = `translate3d(${c*SIZE}px,${spawnRow*SIZE}px,0)`;
-
-      // ensure spawned tile appears on top while dropping
       t.el.classList.add('falling');
 
       const distance = (r - spawnRow) * SIZE;
@@ -459,7 +610,7 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
       requestAnimationFrame(()=>{
         t.el.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
         styleTile(t);
-        t.el.addEventListener('transitionend', function cb(){
+        t.el.addEventListener('transitionend', function cb(ev){
           t.el.style.transition = '';
           t.el.classList.remove('falling');
           t.el.removeEventListener('transitionend', cb);
@@ -474,6 +625,7 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
 }
 
 
+
     function levelUp(){ level++; targetScore += Math.round(2000 * Math.pow(level, 2)); base += 50; // new higher target
       levelStartScore = score; // start progress at current score for the new target
       const cx = (N * SIZE) / 2, cy = (N * SIZE) / 2; Engine.burstAt(cx, cy, 'gold', 80, 300); const popup = document.createElement('div'); popup.textContent = `LEVEL ${level}!`; popup.style.position = 'absolute'; popup.style.top = '50%'; popup.style.left = '50%'; popup.style.zIndex = '10'; popup.style.transform = 'translate(-50%, -50%)'; popup.style.fontSize = '64px'; popup.style.fontWeight = 'bold'; popup.style.color = 'gold'; popup.style.textShadow = '0 0 15px black, 0 0 30px orange'; popup.style.pointerEvents = 'none'; popup.style.opacity = '0'; popup.style.transition = 'opacity 0.5s ease'; document.body.appendChild(popup); setTimeout(()=>popup.style.opacity = '1', 50); setTimeout(()=>{ popup.style.opacity = '0'; setTimeout(()=>popup.remove(),500); }, 2000); shuffleBoard(); setHUD(); }
@@ -483,6 +635,80 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
       // after shuffle, check for no moves
       checkNoMovesAndHandle();
     }
+
+    // Replace your existing showScorePopup with this version
+// new showScorePopup: starts scaling at 5x base, caps at 3x at 15x base
+function showScorePopup(points, x, y, color, label){
+  const popup = document.createElement('div');
+  popup.textContent = label ? `${label} +${points}` : `+${points}`;
+  popup.style.position = 'absolute';
+  popup.style.left = `${x}px`;
+  popup.style.top = `${y}px`;
+  popup.style.transformOrigin = '50% 50%';
+  popup.style.fontWeight = '900';
+  popup.style.color = color || 'white';
+  popup.style.textShadow = '0 0 8px rgba(0,0,0,0.8)';
+  popup.style.pointerEvents = 'none';
+  popup.style.zIndex = '999';
+  popup.style.opacity = '1';
+
+  // safe base handling
+  const safeBase = (typeof base === 'number' && base > 0) ? base : 50;
+
+  // scaling thresholds
+  const startThreshold = 5 * safeBase;   // start scaling at 5x base
+  const endThreshold   = 15 * safeBase;  // reach max (2x) at 15x base
+  let scale = 1;
+
+  if (points > startThreshold){
+    const t = Math.min(1, (points - startThreshold) / Math.max(1, endThreshold - startThreshold));
+    // linear interpolation from 1 -> 3
+    scale = 1 + t * (2 - 1);
+  }
+
+  // font size scales with scale factor (base size 20)
+  const baseFont = 20;
+  popup.style.fontSize = `${Math.round(baseFont * scale)}px`;
+
+  // initial transform: place and scale
+  popup.style.transform = `translate(-50%, -50%) scale(${scale})`;
+  popup.style.transition = 'transform 800ms cubic-bezier(0.2,0.8,0.2,1), opacity 800ms ease-out';
+
+  document.body.appendChild(popup);
+
+  // animate upward and slightly reduce scale for a nice easing feel
+  requestAnimationFrame(()=>{
+    popup.style.transform = `translate(-50%, -80%) scale(${Math.max(0.6, scale * 0.9)})`;
+    popup.style.opacity = '0';
+  });
+
+  setTimeout(()=> popup.remove(), 900);
+}
+
+
+
+// choose a color for the match popup (handles rainbow+color)
+function colorForMatch(match){
+  // Prefer any non-rainbow tile inside the match
+  for (const {r,c} of match.tiles){
+    const t = board[r]?.[c];
+    if (t && t.color != null) {
+      return `hsl(${gemHues[t.color]}, 100%, 60%)`;
+    }
+  }
+  // If all were rainbow, try to infer from the last swap partner
+  if (lastSwap){
+    const a = board[lastSwap.r1]?.[lastSwap.c1];
+    const b = board[lastSwap.r2]?.[lastSwap.c2];
+    const partner = (a && a.color != null && a.type !== T_RAINBOW) ? a :
+                    (b && b.color != null && b.type !== T_RAINBOW) ? b : null;
+    if (partner) return `hsl(${gemHues[partner.color]}, 100%, 60%)`;
+  }
+  // Fallback
+  return 'white';
+}
+
+
 
     function buildBoard(){ // cleanup
       boardEl.querySelectorAll('.tile').forEach(n => n.remove()); Engine.particles.length = 0; Engine.emitters.clear();
