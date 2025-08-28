@@ -6,7 +6,7 @@
   <title>Match-3</title>
   <style>
 :root {
-  --size: 96px;
+  --size: 64px;
   --gap: 6px;
   --n: 8;
 }
@@ -104,7 +104,19 @@ body {
 
  /* color classes (unchanged) */
 .c-0{background:radial-gradient(circle at 30% 30%,#ff4d4d,#ca0000);clip-path:inset(0% round 6px);} .c-1{background:radial-gradient(circle at 30% 30%,#ffe066,#db9d00);clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);} .c-2{background:radial-gradient(circle at 30% 30%,#66ff94,#00925a);clip-path:polygon(50% 0%,83% 12%,100% 43%,94% 78%,68% 100%,33.1% 100%,6% 78%,0 43%,17% 12%);} .c-3{background:radial-gradient(circle at 30% 20%,#66aaff,#003f8f);clip-path:polygon(70% 0,100% 25%,50% 100%,0 25%,30% 0);} .c-4{background:radial-gradient(circle at 30% 30%,#b266ff,#4f00aa);clip-path:polygon(50% 0%,100% 100%,0% 100%);} .c-5{background:radial-gradient(circle at 30% 30%,#ff9933,#ca4300);clip-path:polygon(25% 7%,75% 7%,100% 50%,75% 93%,26% 93%,0% 50%);} .c-6{background:radial-gradient(circle at 30% 30%,#ffffff,#9e9e9e);clip-path:circle(50% at 50% 50%);} .gem.rainbow{position:relative;width:70%;height:70%;background:transparent;overflow:visible;transform-style:preserve-3d;} 
-.gem.rainbow .cube{--cube-size:40px;position:absolute;top:50%;left:50%;width:var(--cube-size);height:var(--cube-size);transform-style:preserve-3d;transform:translate(-50%,-50%) rotateZ(45deg);animation:spinY 3000ms linear infinite;z-index:1;} .gem.rainbow .cube .face{position:absolute;width:var(--cube-size);height:var(--cube-size);top:0;left:0;backface-visibility:hidden;border-radius:6px;background:conic-gradient(from 180deg,#ff4d4d 0%,#ff9933 15%,#ffe066 30%,#66ff94 50%,#66aaff 70%,#b266ff 85%,#ff4d4d 100%);box-shadow:0 0 18px 6px rgba(255,255,255,0.45),0 6px 10px rgba(0,0,0,0.15);} .gem.rainbow .cube .front{transform:translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .back{transform:rotateY(180deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .right{transform:rotateY(90deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .left{transform:rotateY(-90deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .top{transform:rotateX(90deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .bottom{transform:rotateX(-90deg) translateZ(calc(var(--cube-size)/2));}@keyframes spinY{from{transform:translate(-50%,-50%) rotateY(0deg) rotateZ(45deg) rotateX(45deg);}to{transform:translate(-50%,-50%) rotateY(360deg) rotateZ(45deg) rotateX(45deg);}}
+.gem.rainbow .cube {
+  --cube-size: calc(var(--size) * 0.6); /* ~60% of the tile */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--cube-size);
+  height: var(--cube-size);
+  transform-style: preserve-3d;
+  transform: translate(-50%, -50%) rotateZ(45deg);
+  animation: spinY 3000ms linear infinite;
+  z-index: 1;
+}
+ .gem.rainbow .cube .face{position:absolute;width:var(--cube-size);height:var(--cube-size);top:0;left:0;backface-visibility:hidden;border-radius:6px;background:conic-gradient(from 180deg,#ff4d4d 0%,#ff9933 15%,#ffe066 30%,#66ff94 50%,#66aaff 70%,#b266ff 85%,#ff4d4d 100%);box-shadow:0 0 18px 6px rgba(255,255,255,0.45),0 6px 10px rgba(0,0,0,0.15);} .gem.rainbow .cube .front{transform:translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .back{transform:rotateY(180deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .right{transform:rotateY(90deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .left{transform:rotateY(-90deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .top{transform:rotateX(90deg) translateZ(calc(var(--cube-size)/2));}.gem.rainbow .cube .bottom{transform:rotateX(-90deg) translateZ(calc(var(--cube-size)/2));}@keyframes spinY{from{transform:translate(-50%,-50%) rotateY(0deg) rotateZ(45deg) rotateX(45deg);}to{transform:translate(-50%,-50%) rotateY(360deg) rotateZ(45deg) rotateX(45deg);}}
 .gem.star::before,.gem.star::after{content:"";position:absolute;background:rgba(255,255,255);box-shadow:0 0 12px 4px rgb(255,255,255);} .gem.star::before{width:70%;height:20%;top:40%;left:15%;} .gem.star::after{width:20%;height:70%;top:15%;left:40%;animation:starPulse 1.2s infinite ease-in-out;} @keyframes starPulse{0%,100%{opacity:.8;}50%{opacity:1;}}
 .gem.supernova::before,.gem.supernova::after{content:"";position:absolute;background:rgba(255,255,255);box-shadow:0 0 20px 6px rgb(255,255,255);} .gem.supernova::before{width:80%;height:20%;top:40%;left:10%;} .gem.supernova::after{width:20%;height:80%;top:10%;left:40%;animation:starPulse 1.2s infinite ease-in-out;}
 @media(max-width:600px){.wrap{transform:scale(.7);}} @media(max-width:400px){.wrap{transform:scale(.55);}}
@@ -455,14 +467,17 @@ function normalizeBoard(){
 
         function calcMatchScore(m){ const len = m.tiles.length; const isLT = len >= 5 && new Set(m.tiles.map(t=>t.r)).size > 1 && new Set(m.tiles.map(t=>t.c)).size > 1; if (isLT) return base + base*2; if (len===3) return base; if (len===4) return base*2; if (len===5) return base*10; if (len>=6) return base * len * 3; return 0; }
 
-        for (const m of matches){
-  // score for this match now accounts for the cascade multiplier
-  // (cascadeCount is 1 for the first wave, 2 for the first cascade, etc.)
+        let matchIndex = 0;
+for (const m of matches){
+  matchIndex++; // 1st, 2nd, 3rd match in this wave
+
   const baseMatch = calcMatchScore(m);
-  const gained = baseMatch * cascadeCount; // <-- cascade multiplier applied here
+
+  // ✅ multiplier = cascadeCount * matchIndex
+  const gained = baseMatch * cascadeCount * matchIndex;
   score += gained;
 
-  // POPUP for this match (colored), shows the full gained value (including cascade)
+  // POPUP for this match
   if (m.tiles.length && gained > 0){
     let sumX = 0, sumY = 0;
     for (const {r,c} of m.tiles){
@@ -472,7 +487,13 @@ function normalizeBoard(){
     const avgX = sumX / m.tiles.length;
     const avgY = sumY / m.tiles.length;
     const rect = boardEl.getBoundingClientRect();
-    showScorePopup(gained, rect.left + avgX, rect.top + avgY, colorForMatch(m));
+
+    showScorePopup(
+      gained,
+      rect.left + avgX,
+      rect.top + avgY,
+      colorForMatch(m),
+    );
   }
 
   const specials = classifyMatch(m);
@@ -540,13 +561,20 @@ if (hasSpecial){
 
         for (let r=0;r<N;r++){ for (let c=0;c<N;c++){ const cur = board[r][c]; if (cur && cur.isClearing){ if (cur.pendingType){ cur.isClearing = false; cur.type = cur.pendingType; cur.pendingType = null; cur.el.style.opacity = 1; setSpecialVisual(cur); } else { const cx = c * SIZE + SIZE/2, cy = r * SIZE + SIZE/2; Engine.burstAt(cx, cy, gemHues[cur.color ?? 0], 24, 160); cur.el.remove(); Engine.removeEmitter(cur); board[r][c] = null; } } } }
 
-        const cBonus = base * (cascadeCount - 1);
+        // cascade bonus = base * total matches cleared this wave
+const cBonus = base * matches.length * cascadeCount;
 if (cBonus > 0){
   score += cBonus;
   const rect = boardEl.getBoundingClientRect();
-  // show near the top-center of the board
-  showScorePopup(cBonus, rect.left + (N*SIZE)/2, rect.top + 24, '#66ff94', `Cascade x${cascadeCount}`);
+  showScorePopup(
+    cBonus,
+    rect.left + (N*SIZE)/2,
+    rect.top + 24,
+    '#66ff94',
+    `Cascade x${cascadeCount}`
+  );
 }
+
 
         if (score >= targetScore) levelUp(); setHUD(); await collapseAndRefill(); await wait(120);
     }
@@ -852,41 +880,35 @@ function showScorePopup(points, x, y, color, label){
   const popup = document.createElement('div');
   popup.textContent = label ? `${label} +${points}` : `+${points}`;
   popup.style.position = 'absolute';
-  popup.style.left = `${x}px`;
-  popup.style.top = `${y}px`;
+  popup.style.left = `${x - boardEl.getBoundingClientRect().left}px`;
+  popup.style.top = `${y - boardEl.getBoundingClientRect().top}px`;
   popup.style.transformOrigin = '50% 50%';
   popup.style.fontWeight = '900';
   popup.style.color = color || 'white';
   popup.style.textShadow = '0 0 8px rgba(0,0,0,0.8)';
   popup.style.pointerEvents = 'none';
-  popup.style.zIndex = '999';
+  popup.style.zIndex = '15';
   popup.style.opacity = '1';
 
-  // safe base handling
-  const safeBase = (typeof base === 'number' && base > 0) ? base : 50;
-
   // scaling thresholds
-  const startThreshold = 5 * safeBase;   // start scaling at 5x base
-  const endThreshold   = 15 * safeBase;  // reach max (2x) at 15x base
+  const safeBase = (typeof base === 'number' && base > 0) ? base : 50;
+  const startThreshold = 5 * safeBase;
+  const endThreshold   = 15 * safeBase;
   let scale = 1;
-
   if (points > startThreshold){
     const t = Math.min(1, (points - startThreshold) / Math.max(1, endThreshold - startThreshold));
-    // linear interpolation from 1 -> 3
-    scale = 1 + t * (2 - 1);
+    scale = 1 + t; // 1 → 2x
   }
 
-  // font size scales with scale factor (base size 20)
-  const baseFont = 20;
-  popup.style.fontSize = `${Math.round(baseFont * scale)}px`;
+  // ✅ font size now scales with tile SIZE (and clamp for safety)
+  const baseFont = SIZE * 0.35; // ~35% of tile size
+  popup.style.fontSize = `clamp(12px, ${Math.round(baseFont * scale)}px, 36px)`;
 
-  // initial transform: place and scale
   popup.style.transform = `translate(-50%, -50%) scale(${scale})`;
   popup.style.transition = 'transform 800ms cubic-bezier(0.2,0.8,0.2,1), opacity 800ms ease-out';
 
-  document.body.appendChild(popup);
+  boardEl.appendChild(popup);
 
-  // animate upward and slightly reduce scale for a nice easing feel
   requestAnimationFrame(()=>{
     popup.style.transform = `translate(-50%, -80%) scale(${Math.max(0.6, scale * 0.9)})`;
     popup.style.opacity = '0';
@@ -894,6 +916,7 @@ function showScorePopup(points, x, y, color, label){
 
   setTimeout(()=> popup.remove(), 900);
 }
+
 
 
 
@@ -945,5 +968,4 @@ function colorForMatch(match){
     buildBoard();
   </script>
 </body>
-
 </html>
