@@ -5,14 +5,76 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Match-3</title>
   <style>
-:root { --size: 64px; --gap: 6px; --n: 8; }
+:root {
+  --size: 64px;
+  --gap: 6px;
+  --n: 8;
+}
+
+/* ✅ Mobile scaling: smaller tiles on smaller screens */
+@media (max-width: 600px) {
+  :root { --size: 42px; --gap: 4px; }
+}
+@media (max-width: 400px) {
+  :root { --size: 36px; --gap: 3px; }
+}
+
 * { box-sizing: border-box; }
-body { margin: 0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; background: #adc0ff; font-family: sans-serif; padding: 10px; }
-.wrap { width: calc(var(--size) * var(--n)); user-select: none; transform-origin: top center; }
-.hud { display: flex; justify-content: space-between; margin-bottom: 10px; gap: 6px; flex-wrap: wrap; }
-.pill { padding: 6px 10px; border-radius: 12px; background: #fff; border: 1px solid #ccc; font-weight: 700; font-size: clamp(12px, 2.5vw, 20px); }
+
+body {
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  background: #adc0ff;
+  font-family: sans-serif;
+  padding: 10px;
+  overflow-x: hidden;
+  touch-action: none; /* prevent accidental double-tap zooms */
+}
+
+.wrap {
+  width: calc(var(--size) * var(--n));
+  max-width: 100vw;
+  user-select: none;
+  transform-origin: top center;
+}
+
+/* ✅ HUD buttons more finger-friendly */
+.hud {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pill {
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid #ccc;
+  font-weight: 700;
+  font-size: clamp(14px, 4vw, 20px);
+  flex: 1 1 auto;
+  text-align: center;
+  min-width: 90px;
+}
 .board { position: relative; width: calc(var(--size) * var(--n)); height: calc(var(--size) * var(--n)); background: #adc0ff; border: 1px solid #ddd; border-radius: 12px; overflow: hidden; transition: filter 240ms ease, opacity 240ms ease; }
-.board.blurred { filter: blur(6px) saturate(.6); pointer-events: none; user-select: none; }
+.board.blurred {
+  pointer-events: none;
+  user-select: none;
+}
+
+.board.blurred::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(6px) saturate(.6);
+  background: rgba(0,0,0,0.1);
+  z-index: 10;
+  pointer-events: none;
+}
 .fx-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .cell-bg { position: absolute; width: var(--size); height: var(--size); border: 1px solid rgba(0,0,0,0.05); pointer-events: none; z-index: 0; }
 .tile { position: absolute; width: var(--size); height: var(--size); display: grid; place-items: center; transition: transform 180ms ease, opacity 160ms ease; z-index: 1; font-size: clamp(20px, 4vw, 28px); perspective: 600px; }
@@ -31,9 +93,17 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
 #noMovesOverlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:20; pointer-events:none; opacity:0; transition:opacity 220ms ease; }
 #noMovesOverlay.active { pointer-events:auto; opacity:1; }
 .noMovesBox { background: rgba(0,0,0,0.55); padding: 30px 36px; border-radius:14px; text-align:center; color: #fff; box-shadow: 0 8px 40px rgba(0,0,0,0.45); transform: translateY(-6px); }
-.noMovesBox h1 { margin: 0 0 8px 0; font-size: 36px; letter-spacing: 0.5px; }
-.noMovesBox p { margin: 0 0 12px 0; opacity: .9; }
+.noMovesBox h1 {
+  font-size: clamp(20px, 6vw, 40px);
+}
+.noMovesBox p {
+  font-size: clamp(14px, 4vw, 20px);
+}
 .noMovesBox button { padding: 8px 14px; border-radius: 10px; background: #fff; border: none; font-weight: 700; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) {
+  .tile { transition: none !important; }
+  .board.blurred::after { backdrop-filter: none; }
+}
 
  /* color classes (unchanged) */
 .c-0{background:radial-gradient(circle at 30% 30%,#ff4d4d,#ca0000);clip-path:inset(0% round 6px);} .c-1{background:radial-gradient(circle at 30% 30%,#ffe066,#db9d00);clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);} .c-2{background:radial-gradient(circle at 30% 30%,#66ff94,#00925a);clip-path:polygon(50% 0%,83% 12%,100% 43%,94% 78%,68% 100%,33.1% 100%,6% 78%,0 43%,17% 12%);} .c-3{background:radial-gradient(circle at 30% 20%,#66aaff,#003f8f);clip-path:polygon(70% 0,100% 25%,50% 100%,0 25%,30% 0);} .c-4{background:radial-gradient(circle at 30% 30%,#b266ff,#4f00aa);clip-path:polygon(50% 0%,100% 100%,0% 100%);} .c-5{background:radial-gradient(circle at 30% 30%,#ff9933,#ca4300);clip-path:polygon(25% 7%,75% 7%,100% 50%,75% 93%,26% 93%,0% 50%);} .c-6{background:radial-gradient(circle at 30% 30%,#ffffff,#9e9e9e);clip-path:circle(50% at 50% 50%);} .gem.rainbow{position:relative;width:70%;height:70%;background:transparent;overflow:visible;transform-style:preserve-3d;} 
@@ -95,7 +165,8 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
     const fxCanvas = document.getElementById('fx');
     const ctx = fxCanvas.getContext('2d', { alpha: true });
 
-    const gemHues = {0:0,1:50,2:140,3:210,4:280,5:30,6:0};
+    // gemHues: numeric -> hue degrees; non-numeric -> CSS color string (white/gold/etc).
+    const gemHues = {0:0,1:50,2:140,3:210,4:280,5:30,6:'white'};
 
     // ---------- Lightweight particle system (optimized) ----------
     class Particle {
@@ -103,10 +174,79 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
         Object.assign(this,{x,y,vx,vy,size,hue,life,maxLife,gravity,drag,type,layer});
       }
       step(dt){ this.vx *= this.drag; this.vy = this.vy * this.drag + this.gravity * dt; this.x += this.vx * dt; this.y += this.vy * dt; this.life += dt; return this.life < this.maxLife; }
-      draw(ctx){ const alpha = Math.max(0,1 - (this.life/this.maxLife)); ctx.globalAlpha = alpha; if(this.type==='flame'){ ctx.fillStyle = `hsla(${this.hue},100%,60%,${alpha})`; ctx.shadowBlur = 15; ctx.shadowColor = ctx.fillStyle; ctx.beginPath(); ctx.ellipse(this.x,this.y,this.size*0.5,this.size*1.8,0,0,Math.PI*2); ctx.fill(); ctx.shadowBlur = 0; }
-        else if (this.type==='burststar'){ ctx.save(); ctx.translate(this.x,this.y); const progress = this.life/this.maxLife; const alpha2 = 1-progress; ctx.globalAlpha = alpha2; const spikes = 8; const outer = this.size*(1 + progress*3); ctx.strokeStyle = `rgba(255,255,255,${alpha2})`; ctx.lineWidth = 2; ctx.shadowBlur = 20; ctx.shadowColor = '#ffffff'; ctx.beginPath(); for(let i=0;i<spikes;i++){ const ang=(i/spikes)*Math.PI*2; const px=Math.cos(ang)*outer; const py=Math.sin(ang)*outer; ctx.moveTo(0,0); ctx.lineTo(px,py);} ctx.stroke(); ctx.restore(); ctx.shadowBlur = 0; }
-        else{ ctx.fillStyle = `hsla(${this.hue},100%,70%,${alpha})`; ctx.shadowBlur = 15; ctx.shadowColor = ctx.fillStyle; ctx.beginPath(); ctx.arc(this.x,this.y,this.size,0,Math.PI*2); ctx.fill(); ctx.shadowBlur = 0; }
-        ctx.globalAlpha = 1; }
+      draw(ctx){
+        const alpha = Math.max(0,1 - (this.life/this.maxLife));
+        ctx.globalAlpha = alpha;
+
+        const isNumericHue = (typeof this.hue === 'number');
+
+        if(this.type==='flame'){
+          if (isNumericHue) {
+            ctx.fillStyle = `hsla(${this.hue},100%,60%,${alpha})`;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.beginPath();
+            ctx.ellipse(this.x,this.y,this.size*0.5,this.size*1.8,0,0,Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          } else {
+            // non-numeric hues (e.g. 'white' or 'gold') -> use color string with globalAlpha
+            ctx.fillStyle = this.hue;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.beginPath();
+            ctx.ellipse(this.x,this.y,this.size*0.5,this.size*1.8,0,0,Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          }
+        }
+        else if (this.type==='burststar'){
+          ctx.save();
+          ctx.translate(this.x,this.y);
+          const progress = this.life/this.maxLife;
+          const alpha2 = 1-progress;
+          ctx.globalAlpha = alpha2;
+          const spikes = 8;
+          const outer = this.size*(1 + progress*3);
+          ctx.strokeStyle = `rgba(255,255,255,${alpha2})`;
+          ctx.lineWidth = 2;
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = '#ffffff';
+          ctx.beginPath();
+          for(let i=0;i<spikes;i++){
+            const ang=(i/spikes)*Math.PI*2;
+            const px=Math.cos(ang)*outer;
+            const py=Math.sin(ang)*outer;
+            ctx.moveTo(0,0);
+            ctx.lineTo(px,py);
+          }
+          ctx.stroke();
+          ctx.restore();
+          ctx.shadowBlur = 0;
+        }
+        else {
+          if (isNumericHue) {
+            ctx.fillStyle = `hsla(${this.hue},100%,70%,${alpha})`;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.beginPath();
+            ctx.arc(this.x,this.y,this.size,0,Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          } else {
+            // non-numeric color (e.g. 'white', 'gold', or a CSS color) — rely on globalAlpha
+            ctx.fillStyle = this.hue;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.beginPath();
+            ctx.arc(this.x,this.y,this.size,0,Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          }
+        }
+
+        ctx.globalAlpha = 1;
+      }
     }
 
     class Emitter {
@@ -161,7 +301,13 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
         const BATCH = 20;
         for (let i = this.activeBursts.length - 1; i >= 0; i--) {
           const b = this.activeBursts[i]; const n = Math.min(BATCH, b.remaining);
-          for (let j=0;j<n;j++){ const ang = Math.random()*Math.PI*2; const spd = Math.random()*120 + 40; const vx = Math.cos(ang)*spd; const vy = Math.sin(ang)*spd; const hue = b.baseHue + (Math.random()*30 - 15);
+          for (let j=0;j<n;j++){
+            const ang = Math.random()*Math.PI*2;
+            const spd = Math.random()*120 + 40;
+            const vx = Math.cos(ang)*spd;
+            const vy = Math.sin(ang)*spd;
+            // support numeric baseHue or CSS color string
+            const hue = (typeof b.baseHue === 'number') ? (b.baseHue + (Math.random()*30 - 15)) : b.baseHue;
             this.particles.push(new Particle(b.x, b.y, vx, vy, 3 + Math.random()*3, hue, 0, 0.8 + Math.random()*0.5, 300, 0.92, 'circle', 'front'));
           }
           b.remaining -= n; if (b.remaining <= 0) this.activeBursts.splice(i,1);
@@ -191,27 +337,88 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
     const randInt = n => Math.floor(Math.random() * n);
     const inBounds = (r,c) => r >= 0 && r < N && c >= 0 && c < N;
 
-    function styleTile(t){ t.el.style.transform = `translate3d(${t.col * SIZE}px, ${t.row * SIZE}px, 0)`; }
+    // Replace the existing styleTile(t) with this improved version
+    function styleTile(t){
+      if (!t || !t.el) return;
+      // keep DOM data attributes in sync with logical position (useful for diagnostics / normalization)
+      t.el.dataset.r = String(t.row);
+      t.el.dataset.c = String(t.col);
+      // set visual position directly
+      t.el.style.transform = `translate3d(${t.col * SIZE}px, ${t.row * SIZE}px, 0)`;
+    }
 
     function createCubeMesh(gem){ if (gem.querySelector('.cube')) return; const cube = document.createElement('div'); cube.className = 'cube'; ['front','back','right','left','top','bottom'].forEach(side=>{ const f = document.createElement('div'); f.className = 'face ' + side; cube.appendChild(f); }); gem.appendChild(cube); }
 
-    function makeTile(r,c,color = randInt(COLORS), container = boardEl){
-      const el = document.createElement('div');
-      el.className = 'tile';
-      const gem = document.createElement('div');
-      gem.className = `gem c-${color}`;
-      el.appendChild(gem);
+    // Replace makeTile(...) implementation with this
+function makeTile(r, c, color = randInt(COLORS), container = boardEl){
+  const el = document.createElement('div');
+  el.className = 'tile';
 
-      const t = { row: r, col: c, color, type: T_NORMAL, el, isClearing: false, _uid: tileUID++ };
-      styleTile(t);
-      attachDragHandlers(t);
-      container.appendChild(el);
+  // place it at the correct place immediately to avoid initial 0,0 flash/overlap
+  el.style.transition = 'none';
+  el.style.transform = `translate3d(${c * SIZE}px, ${r * SIZE}px, 0)`;
+  el.dataset.r = String(r);
+  el.dataset.c = String(c);
 
-      // <-- add this line so the DOM element references back to the tile object
-      el._tile = t;
+  const gem = document.createElement('div');
+  gem.className = `gem c-${color}`;
+  el.appendChild(gem);
 
-      return t;
+  const t = { row: r, col: c, color, type: T_NORMAL, el, isClearing: false, _uid: tileUID++ };
+  el._tile = t;
+
+  // attach handlers before appending so listeners exist, but element is already positioned
+  attachDragHandlers(t);
+  container.appendChild(el);
+
+  // allow normal transitions next frame (so subsequent moves animate nicely)
+  requestAnimationFrame(() => { el.style.transition = ''; });
+
+  return t;
+}
+
+// Add this helper near other utility functions
+function normalizeBoard(){
+  // map of occupied positions -> primary tile we keep
+  const occupied = {};
+
+  // ensure each board[r][c] tile has correct row/col and style
+  for (let r = 0; r < N; r++){
+    for (let c = 0; c < N; c++){
+      const t = board[r][c];
+      if (!t) continue;
+
+      // force the object's coords to match the matrix (prevents stale coords)
+      t.row = r;
+      t.col = c;
+
+      // sync DOM dataset and transform
+      if (t.el) {
+        t.el.dataset.r = String(r);
+        t.el.dataset.c = String(c);
+        styleTile(t);
+      }
+
+      const key = `${r},${c}`;
+      if (occupied[key]) {
+        // collision: remove the duplicate tile element and leave board entry pointing to the first one
+        if (t.el) t.el.remove();
+        board[r][c] = occupied[key];
+      } else {
+        occupied[key] = t;
+      }
     }
+  }
+
+  // remove stray .tile DOM nodes that are not referenced by board[][]
+  boardEl.querySelectorAll('.tile').forEach(el => {
+    const t = el._tile;
+    if (!t || !inBounds(t.row, t.col) || board[t.row][t.col] !== t) {
+      el.remove();
+    }
+  });
+}
+
 
     function setSpecialVisual(t){ const tileEl = t.el; const gem = tileEl.firstChild; if (!gem) return; Engine.removeEmitter(t);
       gem.className = (t.color == null) ? 'gem' : `gem c-${t.color}`; gem.innerHTML = '';
@@ -241,7 +448,7 @@ body { margin: 0; display: flex; justify-content: center; align-items: flex-star
       a.el.addEventListener('transitionend', cleanup); b.el.addEventListener('transitionend', cleanup);
     }
 
-    function queueResolve(){ resolveQueued = true; if (resolving) return; resolving = true; (async ()=>{ while(resolveQueued){ resolveQueued = false; await resolveBoard(); } resolving = false; })(); }
+    function queueResolve(){ resolveQueued = true; if (resolving) return; resolving = true; (async ()=>{ while(resolveQueued){ resolveQueued = false; await resolveBoard(); } resolving = false; checkNoMovesAndHandle();})(); }
 
     // faster bomb count (used rarely)
     function countBombExplosion(bomb){ let destroyed = 0; const {row,col} = bomb; for (let dr=-1; dr<=1; dr++){ for (let dc=-1; dc<=1; dc++){ const rr=row+dr, cc=col+dc; if (inBounds(rr,cc)){ const t = board[rr][cc]; if (t && t.isClearing) destroyed++; } } } return destroyed; }
@@ -416,7 +623,8 @@ if (cBonus > 0){
         const px = rect.left + (c * SIZE + SIZE/2);
         const py = rect.top + (r * SIZE + SIZE/2);
         const colHue = gemHues[victim.color ?? 0];
-        showScorePopup(base, px, py, `hsl(${colHue}, 100%, 60%)`);
+        const colorToUse = (typeof colHue === 'number') ? `hsl(${colHue}, 100%, 60%)` : colHue;
+        showScorePopup(base, px, py, colorToUse);
         score += base;
         Engine.burstAt(c * SIZE + SIZE/2, r * SIZE + SIZE/2, gemHues[victim.color ?? 0], 8, 120);
 
@@ -543,6 +751,9 @@ if (cBonus > 0){
       let maxH = 1, maxV = 1; for (const cols of rowsMap.values()) maxH = Math.max(maxH, longestInSorted(cols.slice())); for (const rows of colsMap.values()) maxV = Math.max(maxV, longestInSorted(rows.slice())); const maxLine = Math.max(maxH, maxV); const isLT = tiles.length >= 5 && rowsMap.size > 1 && colsMap.size > 1; const specials = []; if (maxLine >= 6) specials.push(T_SUPERNOVA); else if (maxLine >= 5) specials.push(T_RAINBOW); else if (maxLine === 4) specials.push(T_BOMB); if (isLT) specials.push(T_STAR); const orientation = (maxH >= maxV) ? 'hor' : 'ver'; const res = (specials.length ? specials : [T_NORMAL]); res.orientation = orientation; return res; }
 
     async function collapseAndRefill(){
+
+      normalizeBoard();
+
   for (let c = 0; c < N; c++){
     let write = N - 1;
 
@@ -620,6 +831,7 @@ if (cBonus > 0){
   }
 
   await wait(250);
+  normalizeBoard();
   // after refill, check for no moves
   checkNoMovesAndHandle();
 }
@@ -628,11 +840,12 @@ if (cBonus > 0){
 
     function levelUp(){ level++; targetScore += Math.round(2000 * Math.pow(level, 2)); base += 50; // new higher target
       levelStartScore = score; // start progress at current score for the new target
-      const cx = (N * SIZE) / 2, cy = (N * SIZE) / 2; Engine.burstAt(cx, cy, 'gold', 80, 300); const popup = document.createElement('div'); popup.textContent = `LEVEL ${level}!`; popup.style.position = 'absolute'; popup.style.top = '50%'; popup.style.left = '50%'; popup.style.zIndex = '10'; popup.style.transform = 'translate(-50%, -50%)'; popup.style.fontSize = '64px'; popup.style.fontWeight = 'bold'; popup.style.color = 'gold'; popup.style.textShadow = '0 0 15px black, 0 0 30px orange'; popup.style.pointerEvents = 'none'; popup.style.opacity = '0'; popup.style.transition = 'opacity 0.5s ease'; document.body.appendChild(popup); setTimeout(()=>popup.style.opacity = '1', 50); setTimeout(()=>{ popup.style.opacity = '0'; setTimeout(()=>popup.remove(),500); }, 2000); shuffleBoard(); setHUD(); }
+      const cx = (N * SIZE) / 2, cy = (N * SIZE) / 2; Engine.burstAt(cx, cy, 'gold', 80, 300); const popup = document.createElement('div'); popup.textContent = `LEVEL ${level}!`; popup.style.position = 'absolute'; popup.style.top = '50%'; popup.style.left = '50%'; popup.style.zIndex = '10'; popup.style.transform = 'translate(-50%, -50%)'; popup.style.fontSize = '64px'; popup.style.fontWeight = 'bold'; popup.style.color = 'gold'; popup.style.textShadow = '0 0 15px black, 0 0 30px orange'; popup.style.pointerEvents = 'none'; popup.style.opacity = '0'; popup.style.transition = 'opacity 0.5s ease'; popup.style.whiteSpace = 'nowrap'; boardEl.appendChild(popup); setTimeout(()=>popup.style.opacity = '1', 50); setTimeout(()=>{ popup.style.opacity = '0'; setTimeout(()=>popup.remove(),500); }, 2000); shuffleBoard(); setHUD(); }
 
     function shuffleBoard(){ const gems = []; for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (board[r][c]) gems.push(board[r][c]); for (let i=gems.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [gems[i], gems[j]] = [gems[j], gems[i]]; }
       let idx = 0; for (let r=0;r<N;r++) for (let c=0;c<N;c++){ const t = gems[idx++]; board[r][c] = t; if (t){ t.row = r; t.col = c; t.el.style.transform = `translate3d(${c*SIZE}px, ${r*SIZE}px, 0)`; } }
       // after shuffle, check for no moves
+      normalizeBoard();
       checkNoMovesAndHandle();
     }
 
@@ -693,7 +906,8 @@ function colorForMatch(match){
   for (const {r,c} of match.tiles){
     const t = board[r]?.[c];
     if (t && t.color != null) {
-      return `hsl(${gemHues[t.color]}, 100%, 60%)`;
+      const hueVal = gemHues[t.color];
+      return (typeof hueVal === 'number') ? `hsl(${hueVal}, 100%, 60%)` : hueVal;
     }
   }
   // If all were rainbow, try to infer from the last swap partner
@@ -702,13 +916,14 @@ function colorForMatch(match){
     const b = board[lastSwap.r2]?.[lastSwap.c2];
     const partner = (a && a.color != null && a.type !== T_RAINBOW) ? a :
                     (b && b.color != null && b.type !== T_RAINBOW) ? b : null;
-    if (partner) return `hsl(${gemHues[partner.color]}, 100%, 60%)`;
+    if (partner){
+      const hueVal = gemHues[partner.color];
+      return (typeof hueVal === 'number') ? `hsl(${hueVal}, 100%, 60%)` : hueVal;
+    }
   }
   // Fallback
   return 'white';
 }
-
-
 
     function buildBoard(){ // cleanup
       boardEl.querySelectorAll('.tile').forEach(n => n.remove()); Engine.particles.length = 0; Engine.emitters.clear();
@@ -717,10 +932,11 @@ function colorForMatch(match){
       // tiles (batched)
       const frag = document.createDocumentFragment(); board = Array.from({length:N},(_,r)=>Array(N)); for (let r=0;r<N;r++){ for (let c=0;c<N;c++){ const t = makeTile(r,c,randInt(COLORS), frag); board[r][c] = t; } }
       boardEl.appendChild(frag);
+      normalizeBoard();
       // avoid immediate matches
       for (let r=0;r<N;r++) for (let c=0;c<N;c++){ while (causesImmediateMatch(r,c)){ const cur = board[r][c]; cur.color = randInt(COLORS); const gem = cur.el.firstChild; if (gem) gem.className = `gem c-${cur.color}`; } }
       // reset progression state
-      score = 0; level = 1; targetScore = 2000; base = 50; levelStartScore = score;
+      score = 0; level = 1; targetScore = 2500; base = 50; levelStartScore = score;
       // ensure overlay hidden and interactions allowed
       hideNoMovesOverlay();
       setHUD(); Engine.resize(); }
