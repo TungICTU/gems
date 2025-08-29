@@ -578,6 +578,7 @@ if (cBonus > 0){
 
         if (score >= targetScore) levelUp(); setHUD(); await collapseAndRefill(); await wait(120);
     }
+    saveGame();
     }
 
     function clearTile(t, forceColor = null){
@@ -959,13 +960,104 @@ function colorForMatch(match){
       score = 0; level = 1; targetScore = 2500; base = 50; levelStartScore = score;
       // ensure overlay hidden and interactions allowed
       hideNoMovesOverlay();
-      setHUD(); Engine.resize(); }
+      setHUD(); Engine.resize(); 
+    localStorage.removeItem('myGemGameState');
+  saveGame();}
 
     function causesImmediateMatch(r,c){ const cur = board[r][c]; if (!cur) return false; const color = cur.color; if (c>=2 && board[r][c-1] && board[r][c-2] && board[r][c-1].color === color && board[r][c-2].color === color) return true; if (r>=2 && board[r-1][c] && board[r-2][c] && board[r-1][c].color === color && board[r-2][c].color === color) return true; return false; }
 
     resetBtn.addEventListener('click', () => buildBoard());
     overlayResetBtn.addEventListener('click', () => buildBoard());
-    buildBoard();
+    if (!loadGame()) {
+  buildBoard();
+}
+
+    // ---------- Save / Load (auto-save) ----------
+function saveGame() {
+  try {
+    const state = {
+      score,
+      level,
+      targetScore,
+      base,
+      levelStartScore,
+      // serialize board: keep type and color and pending state
+      board: board.map((row, r) =>
+        row.map((cell, c) => {
+          if (!cell) return null;
+          return {
+            type: cell.type ?? T_NORMAL,
+            color: (typeof cell.color === 'number' ? cell.color : null),
+            pendingType: cell.pendingType ?? null
+          };
+        })
+      )
+    };
+    localStorage.setItem('myGemGameState', JSON.stringify(state));
+  } catch (e) {
+    console.error('saveGame failed', e);
+  }
+}
+
+function loadGame() {
+  const saved = localStorage.getItem('myGemGameState');
+  if (!saved) return false;
+
+  try {
+    const state = JSON.parse(saved);
+
+    // restore basic numbers
+    score = Number(state.score) || 0;
+    level = Number(state.level) || 1;
+    targetScore = Number(state.targetScore) || targetScore;
+    base = Number(state.base) || base;
+    levelStartScore = Number(state.levelStartScore) || score;
+
+    // clear existing DOM tiles & engine
+    boardEl.querySelectorAll('.tile').forEach(n => n.remove());
+    Engine.particles.length = 0;
+    Engine.emitters.clear();
+
+    // reconstruct board array and tiles from saved state
+    board = Array.from({ length: N }, (_, r) => Array(N).fill(null));
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        const cell = state.board && state.board[r] ? state.board[r][c] : null;
+        if (!cell) {
+          board[r][c] = null;
+          continue;
+        }
+        const color = (typeof cell.color === 'number') ? cell.color : randInt(COLORS);
+        const t = makeTile(r, c, color, boardEl); // makeTile attaches handlers & DOM
+        t.type = cell.type || T_NORMAL;
+        if (cell.pendingType) t.pendingType = cell.pendingType;
+        // if it's a special, ensure visual and emitters are correct
+        setSpecialVisual(t);
+        board[r][c] = t;
+      }
+    }
+
+    normalizeBoard();
+    setHUD(); // update progress/level UI
+    Engine.resize();
+
+    return true;
+  } catch (e) {
+    console.error("Failed to load saved game", e);
+    return false;
+  }
+}
+
+// ---------- Startup: only build board if no saved game ----------
+if (!loadGame()) {
+  buildBoard();
+}
+
+// Make sure we auto-save after major state changes:
+// you already call saveGame() at the end of resolveBoard(); if not, add it there.
+// Also call saveGame() at the end of buildBoard() (fresh state) — see below.
+
+
   </script>
 </body>
 </html>
