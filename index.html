@@ -74,7 +74,7 @@ body {
 }
 .fx-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .cell-bg { position: absolute; width: var(--size); height: var(--size); border: 1px solid rgba(0,0,0,0.05); pointer-events: none; z-index: 0; }
-.tile { position: absolute; width: var(--size); height: var(--size); display: grid; place-items: center; transition: transform 180ms ease, opacity 160ms ease; z-index: 1; font-size: clamp(20px, 4vw, 28px); perspective: 600px; }
+.tile { position: absolute; width: var(--size); height: var(--size); display: grid; place-items: center; transition: transform var(--anim-transform, 180ms) ease, opacity var(--anim-opacity, 160ms) ease; z-index: 1; font-size: clamp(20px, 4vw, 28px); perspective: 600px; }
 .tile.falling { z-index: 3; }
 .tile.moving { z-index: 2; }
 .tile.dragging { z-index: 10; transform: scale(1.06); }
@@ -120,7 +120,16 @@ body {
 .gem.star::before,.gem.star::after{content:"";position:absolute;background:rgba(255,255,255);box-shadow:0 0 12px 4px rgb(255,255,255);} .gem.star::before{width:70%;height:20%;top:40%;left:15%;} .gem.star::after{width:20%;height:70%;top:15%;left:40%;animation:starPulse 1.2s infinite ease-in-out;} @keyframes starPulse{0%,100%{opacity:.8;}50%{opacity:1;}}
 .gem.supernova::before,.gem.supernova::after{content:"";position:absolute;background:rgba(255,255,255);box-shadow:0 0 20px 6px rgb(255,255,255);} .gem.supernova::before{width:80%;height:20%;top:40%;left:10%;} .gem.supernova::after{width:20%;height:80%;top:10%;left:40%;animation:starPulse 1.2s infinite ease-in-out;}
 @media(max-width:600px){.wrap{transform:scale(.7);}} @media(max-width:400px){.wrap{transform:scale(.55);}}
-  </style>
+  
+/* iOS touch niceties to reduce accidental zoom/selection */
+html, body {
+  -webkit-user-select: none;
+  -ms-touch-action: none;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: rgba(0,0,0,0);
+}
+</style>
 </head>
 <body>
   <div class="wrap">
@@ -157,6 +166,64 @@ body {
     const T_NORMAL = 'normal', T_BOMB = 'bomb', T_STAR = 'star', T_RAINBOW = 'rainbow', T_SUPERNOVA = 'supernova';
 
     let level = 1, targetScore = 2000, base = 50;
+
+// ---------- DEV SPEED HACK ----------
+let DEV_SPEED = 1; // 1 = normal speed
+
+function speed(ms) {
+  return ms / DEV_SPEED;
+}
+
+// Console helper for devs
+window.setGameSpeed = function(mult) {
+  DEV_SPEED = mult;
+  console.log("Game speed set to ×" + mult);
+  // update CSS animation timing variables
+  document.documentElement.style.setProperty('--anim-transform', speed(180) + 'ms');
+  document.documentElement.style.setProperty('--anim-opacity', speed(160) + 'ms');
+};
+
+// keyboard shortcuts (dev)
+document.addEventListener('keydown', e => {
+  if (e.key === '+') setGameSpeed(DEV_SPEED + 0.5);
+  if (e.key === '-') setGameSpeed(Math.max(0.25, DEV_SPEED - 0.5));
+});
+// ---------- MOBILE: prevent accidental zoom (double-tap & pinch) ----------
+// Note: we use passive:false so we can preventDefault touches when needed.
+(function(){
+  // Prevent double-tap to zoom (iOS/Android)
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', function (event) {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+      event.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, { passive: false });
+
+  // Prevent pinch-to-zoom gesture (iOS Safari)
+  document.addEventListener('gesturestart', function(e){ e.preventDefault(); }, { passive: false });
+  document.addEventListener('gesturechange', function(e){ e.preventDefault(); }, { passive: false });
+  document.addEventListener('gestureend', function(e){ e.preventDefault(); }, { passive: false });
+
+  // Prevent two-finger touchmove (pinch) from zooming
+  document.addEventListener('touchmove', function(e){
+    if (e.touches && e.touches.length > 1) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  // Extra: prevent long-press callout and selection on iOS
+  document.addEventListener('touchstart', function(e){
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    e.preventDefault && e.preventDefault();
+  }, { passive: false });
+})();
+
+
+// initialize CSS animation timing vars
+document.documentElement.style.setProperty('--anim-transform', speed(180) + 'ms');
+document.documentElement.style.setProperty('--anim-opacity', speed(160) + 'ms');
     let board = [], lastSwap = null, score = 0;
     let resolving = false, resolveQueued = false;
     let tileUID = 1;
@@ -526,7 +593,7 @@ for (const m of matches){
 
         for (const key of toClear){ const r = Math.floor(key/N), c = key % N; const cur = board[r][c]; if (cur) clearTile(cur); }
 
-        await wait(120);
+        await wait(speed(120));
 
         const clearingNow = [];
 let hasSpecial = false;
@@ -576,7 +643,7 @@ if (cBonus > 0){
 }
 
 
-        if (score >= targetScore) levelUp(); setHUD(); await collapseAndRefill(); await wait(120);
+        if (score >= targetScore) levelUp(); setHUD(); await collapseAndRefill(); await wait(speed(120));
     }
     saveGame();
     }
@@ -687,11 +754,11 @@ if (cBonus > 0){
 }
 
 
-    async function doPlayerSwap(r1,c1,r2,c2){ if (gameLocked) return; const a = board[r1][c1], b = board[r2][c2]; if (!a || !b || a.isClearing || b.isClearing) return; lastSwap = { r1, c1, r2, c2 }; swapTiles(a,b); await wait(180);
+    async function doPlayerSwap(r1,c1,r2,c2){ if (gameLocked) return; const a = board[r1][c1], b = board[r2][c2]; if (!a || !b || a.isClearing || b.isClearing) return; lastSwap = { r1, c1, r2, c2 }; swapTiles(a,b); await wait(speed(180));
       if (a.type === T_RAINBOW && b.type === T_RAINBOW){ for (let r=0;r<N;r++) for (let c=0;c<N;c++) if (board[r][c]) clearTile(board[r][c]); setHUD(); queueResolve(); return; }
       if (a.type === T_RAINBOW && b){ clearTile(a, b.color); setHUD(); queueResolve(); return; }
       if (b.type === T_RAINBOW && a){ clearTile(b, a.color); setHUD(); queueResolve(); return; }
-      const matches = findMatches(); if (matches.length === 0){ swapTiles(a,b); await wait(180); return; }
+      const matches = findMatches(); if (matches.length === 0){ swapTiles(a,b); await wait(speed(180)); return; }
       setHUD(); queueResolve(); }
 
     function updateProgressBar(){
@@ -808,7 +875,7 @@ if (cBonus > 0){
         t.el.classList.add('falling');
         const distance = (write - oldRow) * SIZE;
         const duration = 120 + distance * 0.5;
-        t.el.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
+        t.el.style.transition = `transform ${speed(duration)}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
         styleTile(t);
 
         t.el.addEventListener('transitionend', function cb(ev){
@@ -845,7 +912,7 @@ if (cBonus > 0){
       const duration = 120 + distance * 0.5;
 
       requestAnimationFrame(()=>{
-        t.el.style.transition = `transform ${duration}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
+        t.el.style.transition = `transform ${speed(duration)}ms cubic-bezier(0.25, 0.8, 0.5, 1)`;
         styleTile(t);
         t.el.addEventListener('transitionend', function cb(ev){
           t.el.style.transition = '';
@@ -856,7 +923,7 @@ if (cBonus > 0){
     }
   }
 
-  await wait(250);
+  await wait(speed(250));
   normalizeBoard();
   // after refill, check for no moves
   checkNoMovesAndHandle();
@@ -906,7 +973,7 @@ function showScorePopup(points, x, y, color, label){
   popup.style.fontSize = `clamp(12px, ${Math.round(baseFont * scale)}px, 36px)`;
 
   popup.style.transform = `translate(-50%, -50%) scale(${scale})`;
-  popup.style.transition = 'transform 800ms cubic-bezier(0.2,0.8,0.2,1), opacity 800ms ease-out';
+  popup.style.transition = `transform ${speed(800)}ms cubic-bezier(0.2,0.8,0.2,1), opacity ${speed(800)}ms ease-out`;
 
   boardEl.appendChild(popup);
 
@@ -915,7 +982,7 @@ function showScorePopup(points, x, y, color, label){
     popup.style.opacity = '0';
   });
 
-  setTimeout(()=> popup.remove(), 900);
+  setTimeout(()=> popup.remove(), speed(900));
 }
 
 
@@ -946,6 +1013,10 @@ function colorForMatch(match){
   return 'white';
 }
 
+if (!loadGame()) {
+  buildBoard(); // start fresh if nothing saved
+}
+
     function buildBoard(){ // cleanup
       boardEl.querySelectorAll('.tile').forEach(n => n.remove()); Engine.particles.length = 0; Engine.emitters.clear();
       // backgrounds
@@ -968,9 +1039,7 @@ function colorForMatch(match){
 
     resetBtn.addEventListener('click', () => buildBoard());
     overlayResetBtn.addEventListener('click', () => buildBoard());
-    if (!loadGame()) {
-  buildBoard();
-}
+    buildBoard();
 
     // ---------- Save / Load (auto-save) ----------
 function saveGame() {
