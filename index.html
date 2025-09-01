@@ -1013,10 +1013,6 @@ function colorForMatch(match){
   return 'white';
 }
 
-if (!loadGame()) {
-  buildBoard(); // start fresh if nothing saved
-}
-
     function buildBoard(){ // cleanup
       boardEl.querySelectorAll('.tile').forEach(n => n.remove()); Engine.particles.length = 0; Engine.emitters.clear();
       // backgrounds
@@ -1039,7 +1035,6 @@ if (!loadGame()) {
 
     resetBtn.addEventListener('click', () => buildBoard());
     overlayResetBtn.addEventListener('click', () => buildBoard());
-    buildBoard();
 
     // ---------- Save / Load (auto-save) ----------
 function saveGame() {
